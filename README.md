@@ -17,3 +17,4 @@ An open source implementation of a stepper driven automated blind system.
 * 24v power supply
 
 ## WIP
+![desk](https://snappies.s3.amazonaws.com/blinds-desk.jpg)
