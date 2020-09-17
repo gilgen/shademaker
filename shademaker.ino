@@ -22,10 +22,10 @@
 #define TEMPERATURE A2 // Not used yet
 #define LIGHT       A3
 #define I2C_SCL     A4
-#define I2C SDA     A5
+#define I2C_SDA     A5
 
 #define GEAR_RATIO 5.18181818
-#define AUTO_TRANSITION_INTERVAL (unsigned long)21600000 // 6 hours
+#define AUTO_TRANSITION_INTERVAL 10000 // (unsigned long)21600000 // 6 hours
 #define REVOLUTION (long)(800L * GEAR_RATIO)
 #define MAX_SPEED REVOLUTION
 #define ACCELERATION MAX_SPEED * 1.5
@@ -49,7 +49,7 @@
 #define UP_RELEASED         12
 #define DOWN_RELEASED       13
 
-unsigned long lastAutoTransitionAt;
+unsigned long lastMoveAt = 0;
 long bottomPosition;
 boolean inSetupMode = false;
 
@@ -81,7 +81,7 @@ void onDownStateExit() {
 }
 
 void onSetupStateEnter() {
-  //Serial.println("Entereing setup state");
+  Serial.println("Entereing setup state");
   inSetupMode = true;
 }
 
@@ -142,6 +142,7 @@ void onMidwayStateExit() {
 void onMovingUpStateEnter() {
   //Serial.println("Moving up enter");
   if (!atTop(&xstepper)) {
+    lastMoveAt = millis();
     enableSolenoid();
     xstepper.enableOutputs();
     xstepper.moveTo(0);
@@ -159,6 +160,7 @@ void onMovingUpStateExit() {
 void onMovingDownStateEnter() {
   //Serial.println("Moving down enter");
   if (!atBottom(&xstepper)) {
+    lastMoveAt = millis();
     xstepper.enableOutputs();
     enableSolenoid();
     xstepper.runToNewPosition(xstepper.currentPosition() + SOLENOID_ENABLE_STEPPER_BUMP);
@@ -188,9 +190,8 @@ State midwayState(onMidwayStateEnter, NULL, &onMidwayStateExit);
 Fsm fsm(&upState);
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   Serial.print("Initializing\n");
-  initializeAutoTransitionInterval();
   initializeBottomPosition();
   initializePinIO();
   disableSolenoid();
@@ -198,15 +199,11 @@ void setup() {
   homeSteppers();
   initializeSwitchHandlers();
   initializeFSMTransitions();
+  fsm.run_machine();
   Serial.println("Done initialization");
 }
 
 void loop() {
-  fsm.run_machine();
-  upSwitch.tick();
-  downSwitch.tick();
-  autoSwitch.tick();
-
   if (xstepper.distanceToGo() == 0) {
     if (atTop(&xstepper)) {
       fsm.trigger(MOTORS_AT_TOP);
@@ -216,26 +213,15 @@ void loop() {
   }
 
   if (!inSetupMode) {
-     if (autoModeEnabled() && (millis() - lastAutoTransitionAt) > 10000) {
-      lastAutoTransitionAt = millis();
-      if (isBrightOutside()) {
-        if (xstepper.currentPosition() != bottomPosition) {
-          Serial.println("It is bright outside. Moving blinds down");
-          fsm.trigger(DOWN_CLICK);
-        } else {
-          Serial.println("It is bright but the blinds are already down. No auto click needed :)");
-        }
-      } else {
-        if (xstepper.currentPosition() != 0) {
-          Serial.println("It is dark outside. Moving blinds up");
-          fsm.trigger(UP_CLICK);
-        } else {
-          Serial.println("It is dark but the blinds are already up. No auto click needed :)");
-        }
-      }
-    }
+    runAutoModeRoutines();
   }
 
+  // Tick the switches
+  upSwitch.tick();
+  downSwitch.tick();
+  autoSwitch.tick();
+
+  // Run the steppers
   xstepper.run();
   // ystepper.run();
   // zstepper.run();
@@ -258,6 +244,32 @@ void initializePinIO() {
   pinMode(DOWN_PIN, INPUT_PULLUP);
   pinMode(LIGHT, INPUT_PULLUP);
   pinMode(AUTO_MODE, INPUT_PULLUP);
+}
+
+void runAutoModeRoutines() {
+  if (autoModeEnabled() && readyForAutoCmd()) {
+    if (isBrightOutside()) {
+      if (xstepper.currentPosition() != bottomPosition) {
+        Serial.println("It is bright outside. Moving blinds down");
+        fsm.trigger(DOWN_CLICK);
+      } else {
+        //Serial.println("Checked brightness and it IS bright but the blinds are already down. No auto click needed :)");
+      }
+    } else {
+      if (xstepper.currentPosition() != 0) {
+        Serial.println("It is dark outside. Moving blinds up");
+        fsm.trigger(UP_CLICK);
+      } else {
+        //Serial.println("Checked brightness and its is dark but the blinds are already up. No auto click needed :)");
+      }
+    }
+  }
+}
+
+boolean readyForAutoCmd() {
+  //Serial.print("millis - lastMoveAt: ");
+  //Serial.println(millis() - lastMoveAt);
+  return ((millis() - lastMoveAt) > AUTO_TRANSITION_INTERVAL);
 }
 
 void homeSteppers() {
@@ -318,6 +330,11 @@ void initializeSwitchHandlers() {
     Serial.println("Double click on auto switch.");
     fsm.trigger(AUTO_DOUBLE_CLICK);
   });
+
+  autoSwitch.attachLongPressStart([]() {
+    Serial.println("Auto mode engaged.");
+    lastMoveAt = millis() - AUTO_TRANSITION_INTERVAL;
+  });
 }
 
 void initializeStepper(AccelStepper *stepper) {
@@ -350,15 +367,6 @@ void initializeBottomPosition() {
   } else {
     Serial.print("Pulled bottom position from EEPROM: ");
     Serial.println(bottomPosition);
-  }
-}
-
-
-void initializeAutoTransitionInterval() {
-  if (DEBUG_MODE) {
-    lastAutoTransitionAt = 10000;
-  } else {
-    lastAutoTransitionAt = AUTO_TRANSITION_INTERVAL;
   }
 }
 
