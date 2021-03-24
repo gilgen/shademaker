@@ -1,38 +1,63 @@
 #include <AccelStepper.h>
+#include <MultiStepper.h>
 #include <OneButton.h>
 #include <Fsm.h>
 #include <EEPROM.h>
 
 #define DEBUG_MODE true
 
-#define X_STEP_PIN  2
-#define Y_STEP_PIN  3
-#define Z_STEP_PIN  4
-#define DIRECTION   5
-#define SOLENOID    6
-#define AUTO_MODE   7
-#define ENABLE_PIN  8
-#define X_STOP_PIN  9
-#define Y_STOP_PIN  10
-#define Z_STOP_PIN  11
-#define A_STEP_PIN  12
-#define A_STOP_PIN  13
-#define UP_PIN      A0
-#define DOWN_PIN    A1
-#define TEMPERATURE A2 // Not used yet
-#define LIGHT       A3
-#define I2C_SCL     A4
-#define I2C_SDA     A5
+// Pins 0 and 1 reserved for program writing
+#define X_STEP_PIN  2  // step x
+#define Y_STEP_PIN  3  // step y
+#define Z_STEP_PIN  4  // step z
+#define DIRECTION   5  // direction x
+#define SOLENOID    6  // direction y  | Both of these have headers pulled out
+#define AUTO_MODE   7  // direction z  | of cnc shield and wires soldered onto uno
+#define ENABLE_PIN  8  // enable steppers
+#define X_STOP_PIN  9  // x stop +
+#define Y_STOP_PIN  10 // y stop +
+#define Z_STOP_PIN  11 // z stop +
+#define A_STEP_PIN  12 // spindle enable
+#define A_STOP_PIN  13 // spindle direction
+#define UP_PIN      A0 // abort
+#define DOWN_PIN    A1 // hold
+#define A_STOP_PIN  A2 // resume
+#define LIGHT       A3 // coolant enable
+// #define I2C_SCL     A4 // not used
+// #define I2C_SDA     A5 // not used
 
-#define GEAR_RATIO 5.18181818
-#define AUTO_TRANSITION_INTERVAL 10000 // (unsigned long)21600000 // 6 hours
-#define REVOLUTION (long)(800L * GEAR_RATIO)
-#define MAX_SPEED REVOLUTION
-#define ACCELERATION MAX_SPEED * 1.5
-#define SOLENOID_ENABLE_STEPPER_BUMP -100
+// Stepper driver modules
+#define DRV8825 0
+#define TMC2209 1
+
+// Should be one of the above driver modules
+#define DRIVER_MODULE DRV8825
+
+#if DRIVER_MODULE == DRV8825
+  #define STEPS_PER_SHAFT_REVOLUTION 800L
+  #define DIRECTION_PIN_INVERTED false
+  #define STEP_PIN_INVERTED false
+  #define ENABLE_PIN_INVERTED true
+#elif DRIVER_MODULE == TMC2209
+  #define STEPS_PER_SHAFT_REVOLUTION 1600L
+  #define DIRECTION_PIN_INVERTED true
+  #define STEP_PIN_INVERTED false
+  #define ENABLE_PIN_INVERTED true
+#else
+  #error You need to select a DRIVER_MODULE
+#endif
+
+#define GEAR_RATIO 5.18181818L
+#define AUTO_TRANSITION_INTERVAL (unsigned long)21600000 // 6 hours (or use 100000 for testing)
+#define REVOLUTION (long)(STEPS_PER_SHAFT_REVOLUTION * GEAR_RATIO)
+#define MAX_SPEED REVOLUTION * 0.7
+#define ACCELERATION MAX_SPEED * 1.8
+#define SOLENOID_ENABLE_STEPPER_BUMP -250
 #define SWITCHES_ACTIVE_LOW true
 #define SWITCHES_USE_PULLUP true
 #define BOTTOM_POSITION_ADDRESS 0
+#define SLIP_CORRECTION 2 * REVOLUTION
+#define SOLENOID_PWM_LEVEL 160
 
 // FSM events
 #define DOWN_LONG_PRESS     1
@@ -55,29 +80,33 @@ boolean inSetupMode = false;
 
 // Stepper instances
 AccelStepper xstepper = AccelStepper(AccelStepper::DRIVER, X_STEP_PIN, DIRECTION);
-//AccelStepper ystepper = AccelStepper(AccelStepper::DRIVER, Y_STEP_PIN, DIRECTION);
+AccelStepper ystepper = AccelStepper(AccelStepper::DRIVER, Y_STEP_PIN, DIRECTION);
 //AccelStepper zstepper = AccelStepper(AccelStepper::DRIVER, Z_STEP_PIN, DIRECTION);
 //AccelStepper astepper = AccelStepper(AccelStepper::DRIVER, A_STEP_PIN, DIRECTION);
 
 OneButton upSwitch = OneButton(UP_PIN, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
 OneButton downSwitch = OneButton(DOWN_PIN, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
 OneButton autoSwitch = OneButton(AUTO_MODE, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
+//OneButton xStopSwitch = OneButton(X_STOP_PIN, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
+//OneButton yStopSwitch = OneButton(Y_STOP_PIN, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
+//OneButton zStopSwitch = OneButton(Z_STOP_PIN, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
+//OneButton aStopSwitch = OneButton(A_STOP_PIN, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
 
 // FSM transition events
 void onUpStateEnter() {
-  //Serial.println("Entering up state");
+  Serial.println("Entering up state");
 }
 
 void onUpStateExit() {
-  //Serial.println("Exiting up state");
+  Serial.println("Exiting up state");
 }
 
 void onDownStateEnter() {
-  //Serial.println("Entering down state");
+  Serial.println("Entering down state");
 }
 
 void onDownStateExit() {
-  //Serial.println("Exiting down state");
+  Serial.println("Exiting down state");
 }
 
 void onSetupStateEnter() {
@@ -97,83 +126,65 @@ void onSetupStateExit() {
 }
 
 void onSetupMoveUpStateEnter() {
-  //Serial.println("setup move up enter");
-  if (!atTop(&xstepper)) {
-    enableSolenoid();
-    xstepper.enableOutputs();
-    xstepper.moveTo(0);
+  Serial.println("setup move up enter");
+  if (!atTop()) {
+    moveBlinds(0);
   }
 }
 
 void onSetupMoveUpStateExit() {
-  //Serial.println("Moving up exit");
-  xstepper.stop();
-  xstepper.runToPosition();
-  disableSolenoid();
-  xstepper.disableOutputs();
+  Serial.println("Moving up exit");
+  stopBlinds();
 }
 
 void onSetupMoveDownStateEnter() {
-  //Serial.println("setup down up enter");
-  if (!atBottom(&xstepper)) {
-    xstepper.enableOutputs();
-    enableSolenoid();
-    xstepper.runToNewPosition(xstepper.currentPosition() + SOLENOID_ENABLE_STEPPER_BUMP);
-    xstepper.moveTo(bottomPosition * 100);
+  Serial.println("setup down up enter");
+  if (!atBottom()) {
+    Serial.print("Revolution: ");
+    Serial.print(REVOLUTION);
+    Serial.print(". REVOLUTION * 15: ");
+    Serial.print(REVOLUTION * 15);
+    moveBlinds(REVOLUTION * (long)30);
   }
 }
 
 void onSetupMoveDownStateExit() {
-  //Serial.println("setup dpwn down exit");
-  xstepper.stop();
-  xstepper.runToPosition();
-  disableSolenoid();
-  xstepper.disableOutputs();
+  Serial.println("setup dpwn down exit");
+  stopBlinds();
 }
 
 void onMidwayStateEnter() {
-  //Serial.println("Entereing midway state");
+  Serial.println("Entereing midway state");
 }
 
 void onMidwayStateExit() {
-  //Serial.println("Exiting midway state");
+  Serial.println("Exiting midway state");
 }
 
 void onMovingUpStateEnter() {
-  //Serial.println("Moving up enter");
-  if (!atTop(&xstepper)) {
-    lastMoveAt = millis();
-    enableSolenoid();
-    xstepper.enableOutputs();
-    xstepper.moveTo(0);
+  Serial.println("Moving up enter");
+  if (!atTop()) {
+    // Serial.print("moving blinds to: ");
+    // Serial.println(0 - SLIP_CORRECTION);
+    moveBlinds(0 - SLIP_CORRECTION);
   }
 }
 
 void onMovingUpStateExit() {
-  //Serial.println("Moving up exit");
-  xstepper.stop();
-  xstepper.runToPosition();
-  disableSolenoid();
-  xstepper.disableOutputs();
+  Serial.println("Moving up exit");
+  stopBlinds();
 }
 
 void onMovingDownStateEnter() {
-  //Serial.println("Moving down enter");
-  if (!atBottom(&xstepper)) {
-    lastMoveAt = millis();
-    xstepper.enableOutputs();
-    enableSolenoid();
-    xstepper.runToNewPosition(xstepper.currentPosition() + SOLENOID_ENABLE_STEPPER_BUMP);
-    xstepper.moveTo(bottomPosition);
+  Serial.println("Moving down enter");
+  if (!atBottom()) {
+    moveBlinds(bottomPosition);
   }
 }
 
 void onMovingDownStateExit() {
-  //Serial.println("Moving down exit");
-  xstepper.stop();
-  xstepper.runToPosition();
-  disableSolenoid();
-  xstepper.disableOutputs();
+  Serial.println("Moving down exit");
+  stopBlinds();
 }
 
 // FSM states
@@ -190,11 +201,11 @@ State midwayState(onMidwayStateEnter, NULL, &onMidwayStateExit);
 Fsm fsm(&upState);
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
   Serial.print("Initializing\n");
   initializeBottomPosition();
   initializePinIO();
-  disableSolenoid();
+  disableSolenoid();  
   initializeSteppers();
   homeSteppers();
   initializeSwitchHandlers();
@@ -203,29 +214,66 @@ void setup() {
   Serial.println("Done initialization");
 }
 
+int loopCnt = 0;
+
 void loop() {
-  if (xstepper.distanceToGo() == 0) {
-    if (atTop(&xstepper)) {
-      fsm.trigger(MOTORS_AT_TOP);
-    } else if (!inSetupMode && atBottom(&xstepper)) {
+  if (xstepper.distanceToGo() == 0 || digitalRead(X_STOP_PIN) == LOW) {
+    if (atTop() && xstepper.currentPosition() >= xstepper.targetPosition()) {
+      //Serial.println("Triggering MOTORS_AT_TOP");
+      fsm.trigger(MOTORS_AT_TOP);  
+    } else if (!inSetupMode && atBottom()) {
+      //Serial.println("Triggering MOTORS_AT_BOTTOM");
       fsm.trigger(MOTORS_AT_BOTTOM);
     }
   }
 
-  if (!inSetupMode) {
-    runAutoModeRoutines();
+  // Only tick periodically to speed up the run loop. This
+  // allows the motors to run a bit smoother
+  if (loopCnt % 50 == 0) {
+    if (!inSetupMode) {
+      runAutoModeRoutines();
+    }
+
+    // Tick the switches
+    upSwitch.tick();
+    downSwitch.tick();
+    autoSwitch.tick();
   }
 
-  // Tick the switches
-  upSwitch.tick();
-  downSwitch.tick();
-  autoSwitch.tick();
 
   // Run the steppers
   xstepper.run();
-  // ystepper.run();
-  // zstepper.run();
-  // astepper.run();
+  //ystepper.run();
+  //zstepper.run();
+  //astepper.run();
+  loopCnt++;
+}
+
+void moveBlinds(long newPosition) {
+  lastMoveAt = millis();
+  xstepper.enableOutputs();
+  enableSolenoid();
+
+  // Check if we're moving down. If we are, bump the blind up so that the solenoid can disengage
+  if (xstepper.currentPosition() < newPosition) {
+    Serial.println("bumping up");
+    xstepper.runToNewPosition(xstepper.currentPosition() + SOLENOID_ENABLE_STEPPER_BUMP);  
+    Serial.println("Done bump");
+  }
+
+  Serial.print("Moving blinds to: ");
+  Serial.println(newPosition);
+  xstepper.moveTo(newPosition);
+}
+
+void stopBlinds() {
+  xstepper.stop();
+  xstepper.runToPosition();
+  if (digitalRead(X_STOP_PIN) == LOW || xstepper.currentPosition() < 0) {
+    xstepper.setCurrentPosition(0);
+  }
+  disableSolenoid();
+  xstepper.disableOutputs();
 }
 
 void initializePinIO() {
@@ -249,16 +297,19 @@ void initializePinIO() {
 void runAutoModeRoutines() {
   if (autoModeEnabled() && readyForAutoCmd()) {
     if (isBrightOutside()) {
-      if (xstepper.currentPosition() != bottomPosition) {
+      if (xstepper.currentPosition() > 0) {
         Serial.println("It is bright outside. Moving blinds down");
-        fsm.trigger(DOWN_CLICK);
+        // fsm.trigger(DOWN_CLICK); // For when you want the blinds when it is bright
+        fsm.trigger(UP_CLICK); // For when you want the blinds when it is dark
       } else {
         //Serial.println("Checked brightness and it IS bright but the blinds are already down. No auto click needed :)");
       }
     } else {
-      if (xstepper.currentPosition() != 0) {
-        Serial.println("It is dark outside. Moving blinds up");
-        fsm.trigger(UP_CLICK);
+      if (xstepper.currentPosition() != bottomPosition) {
+        // Serial.println("It is dark outside. Moving blinds up");
+        // Serial.println(xstepper.currentPosition());
+        fsm.trigger(DOWN_CLICK); // For when you want the blinds when it is dark
+        // fsm.trigger(UP_CLICK); // For when you want the blinds when it is bright
       } else {
         //Serial.println("Checked brightness and its is dark but the blinds are already up. No auto click needed :)");
       }
@@ -274,16 +325,16 @@ boolean readyForAutoCmd() {
 
 void homeSteppers() {
   homeStepper(&xstepper, X_STOP_PIN);
-  // homeZeroPosition(&ystepper, Y_STOP_PIN);
-  // homeZeroPosition(&zstepper, Z_STOP_PIN);
-  // homeZeroPosition(&astepper, A_STOP_PIN);
+  //homeStepper(&ystepper, Y_STOP_PIN);
+  //homeStepper(&zstepper, Z_STOP_PIN);
+  //homeStepper(&astepper, A_STOP_PIN);
 }
 
 void initializeSteppers() {
   initializeStepper(&xstepper);
-  // initializeStepper(&ystepper);
-  // initializeStepper(&zstepper);
-  // initializeStepper(&astepper);
+  //initializeStepper(&ystepper);
+  //initializeStepper(&zstepper);
+  //initializeStepper(&astepper);
 }
 
 void initializeFSMTransitions() {
@@ -317,12 +368,12 @@ void initializeFSMTransitions() {
 
 void initializeSwitchHandlers() {
   downSwitch.attachClick([]() {
-    //Serial.println("Click on down switch. Triggering DOWN_CLICK");
+    Serial.println("Click on down switch. Triggering DOWN_CLICK");
     fsm.trigger(DOWN_CLICK);
   });
 
   upSwitch.attachClick([]() {
-    //Serial.println("Click on up switch. Triggering UP_CLICK");
+    Serial.println("Click on up switch. Triggering UP_CLICK");
     fsm.trigger(UP_CLICK);
   });
 
@@ -335,11 +386,15 @@ void initializeSwitchHandlers() {
     Serial.println("Auto mode engaged.");
     lastMoveAt = millis() - AUTO_TRANSITION_INTERVAL;
   });
+
+  // xStopSwitch.attachPressStart([]() {
+  //  Serial.println("x stop switch engaged");
+  // });
 }
 
 void initializeStepper(AccelStepper *stepper) {
   stepper->setEnablePin(ENABLE_PIN);
-  stepper->setPinsInverted(false, false, true);
+  stepper->setPinsInverted(DIRECTION_PIN_INVERTED, STEP_PIN_INVERTED, ENABLE_PIN_INVERTED);
   stepper->setMaxSpeed(MAX_SPEED);
   stepper->setAcceleration(ACCELERATION);
   stepper->disableOutputs();
@@ -349,10 +404,12 @@ void homeStepper(AccelStepper *stepper, int stopPin) {
   Serial.println("Homing...");
   stepper->enableOutputs();
   enableSolenoid();
-  stepper->moveTo(-10*REVOLUTION);
+  stepper->moveTo(-20*REVOLUTION);
   while(digitalRead(stopPin) == HIGH && stepper->distanceToGo() != 0) {
     stepper->run();
   }
+  stepper->stop();
+  xstepper.runToPosition();
   disableSolenoid();
   stepper->disableOutputs();
   stepper->setCurrentPosition(0);
@@ -371,19 +428,21 @@ void initializeBottomPosition() {
 }
 
 void disableSolenoid() {
-  digitalWrite(SOLENOID, HIGH);
-}
-
-void enableSolenoid() {
   digitalWrite(SOLENOID, LOW);
 }
 
-boolean atBottom(AccelStepper *stepper) {
-  return stepper->currentPosition() == bottomPosition;
+void enableSolenoid() {
+  digitalWrite(SOLENOID, HIGH);
+  delay(60);
+  analogWrite(SOLENOID, SOLENOID_PWM_LEVEL);
 }
 
-boolean atTop(AccelStepper *stepper) {
-  return stepper->currentPosition() == 0;
+boolean atBottom() {
+  return xstepper.currentPosition() == bottomPosition;
+}
+
+boolean atTop() {
+  return xstepper.currentPosition() == (0 - SLIP_CORRECTION) || digitalRead(X_STOP_PIN) == LOW;
 }
 
 boolean moveBlindsUpButtonActive() {
