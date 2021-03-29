@@ -1,12 +1,12 @@
 #include <AccelStepper.h>
-#include <MultiStepper.h>
 #include <OneButton.h>
 #include <Fsm.h>
 #include <EEPROM.h>
 
 #define DEBUG_MODE true
 
-// Pins 0 and 1 reserved for program writing
+// Pin 0 not used
+// Pin 1 not used
 #define X_STEP_PIN  2  // step x
 #define Y_STEP_PIN  3  // step y
 #define Z_STEP_PIN  4  // step z
@@ -23,15 +23,15 @@
 #define DOWN_PIN    A1 // hold
 #define A_STOP_PIN  A2 // resume
 #define LIGHT       A3 // coolant enable
-// #define I2C_SCL     A4 // not used
-// #define I2C_SDA     A5 // not used
+// Pin A4 not used
+// Pin A5 not used
 
 // Stepper driver modules
 #define DRV8825 0
 #define TMC2209 1
 
 // Should be one of the above driver modules
-#define DRIVER_MODULE DRV8825
+#define DRIVER_MODULE TMC2209
 
 #if DRIVER_MODULE == DRV8825
   #define STEPS_PER_SHAFT_REVOLUTION 800L
@@ -39,7 +39,7 @@
   #define STEP_PIN_INVERTED false
   #define ENABLE_PIN_INVERTED true
 #elif DRIVER_MODULE == TMC2209
-  #define STEPS_PER_SHAFT_REVOLUTION 1600L
+  #define STEPS_PER_SHAFT_REVOLUTION 800L
   #define DIRECTION_PIN_INVERTED true
   #define STEP_PIN_INVERTED false
   #define ENABLE_PIN_INVERTED true
@@ -50,14 +50,14 @@
 #define GEAR_RATIO 5.18181818L
 #define AUTO_TRANSITION_INTERVAL (unsigned long)21600000 // 6 hours (or use 100000 for testing)
 #define REVOLUTION (long)(STEPS_PER_SHAFT_REVOLUTION * GEAR_RATIO)
-#define MAX_SPEED REVOLUTION * 0.7
+#define MAX_SPEED REVOLUTION * 0.8 // The UNO can do just over 4000 steps/s :'(
 #define ACCELERATION MAX_SPEED * 1.8
 #define SOLENOID_ENABLE_STEPPER_BUMP -250
 #define SWITCHES_ACTIVE_LOW true
 #define SWITCHES_USE_PULLUP true
 #define BOTTOM_POSITION_ADDRESS 0
 #define SLIP_CORRECTION 2 * REVOLUTION
-#define SOLENOID_PWM_LEVEL 160
+#define SOLENOID_PWM_LEVEL 110
 
 // FSM events
 #define DOWN_LONG_PRESS     1
@@ -77,20 +77,14 @@
 unsigned long lastMoveAt = 0;
 long bottomPosition;
 boolean inSetupMode = false;
+long positions[4];
 
-// Stepper instances
+
 AccelStepper xstepper = AccelStepper(AccelStepper::DRIVER, X_STEP_PIN, DIRECTION);
-AccelStepper ystepper = AccelStepper(AccelStepper::DRIVER, Y_STEP_PIN, DIRECTION);
-//AccelStepper zstepper = AccelStepper(AccelStepper::DRIVER, Z_STEP_PIN, DIRECTION);
-//AccelStepper astepper = AccelStepper(AccelStepper::DRIVER, A_STEP_PIN, DIRECTION);
 
 OneButton upSwitch = OneButton(UP_PIN, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
 OneButton downSwitch = OneButton(DOWN_PIN, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
 OneButton autoSwitch = OneButton(AUTO_MODE, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
-//OneButton xStopSwitch = OneButton(X_STOP_PIN, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
-//OneButton yStopSwitch = OneButton(Y_STOP_PIN, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
-//OneButton zStopSwitch = OneButton(Z_STOP_PIN, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
-//OneButton aStopSwitch = OneButton(A_STOP_PIN, SWITCHES_ACTIVE_LOW, SWITCHES_USE_PULLUP);
 
 // FSM transition events
 void onUpStateEnter() {
@@ -127,7 +121,7 @@ void onSetupStateExit() {
 
 void onSetupMoveUpStateEnter() {
   Serial.println("setup move up enter");
-  if (!atTop()) {
+  if (!atTop(&xstepper, X_STOP_PIN)) {
     moveBlinds(0);
   }
 }
@@ -139,7 +133,7 @@ void onSetupMoveUpStateExit() {
 
 void onSetupMoveDownStateEnter() {
   Serial.println("setup down up enter");
-  if (!atBottom()) {
+  if (!atBottom(&xstepper)) {
     Serial.print("Revolution: ");
     Serial.print(REVOLUTION);
     Serial.print(". REVOLUTION * 15: ");
@@ -163,7 +157,7 @@ void onMidwayStateExit() {
 
 void onMovingUpStateEnter() {
   Serial.println("Moving up enter");
-  if (!atTop()) {
+  if (!atTop(&xstepper, X_STOP_PIN)) {
     // Serial.print("moving blinds to: ");
     // Serial.println(0 - SLIP_CORRECTION);
     moveBlinds(0 - SLIP_CORRECTION);
@@ -177,7 +171,7 @@ void onMovingUpStateExit() {
 
 void onMovingDownStateEnter() {
   Serial.println("Moving down enter");
-  if (!atBottom()) {
+  if (!atBottom(&xstepper)) {
     moveBlinds(bottomPosition);
   }
 }
@@ -218,10 +212,10 @@ int loopCnt = 0;
 
 void loop() {
   if (xstepper.distanceToGo() == 0 || digitalRead(X_STOP_PIN) == LOW) {
-    if (atTop() && xstepper.currentPosition() >= xstepper.targetPosition()) {
+    if (atTop(&xstepper, X_STOP_PIN) && xstepper.currentPosition() >= xstepper.targetPosition()) {
       //Serial.println("Triggering MOTORS_AT_TOP");
       fsm.trigger(MOTORS_AT_TOP);  
-    } else if (!inSetupMode && atBottom()) {
+    } else if (!inSetupMode && atBottom(&xstepper)) {
       //Serial.println("Triggering MOTORS_AT_BOTTOM");
       fsm.trigger(MOTORS_AT_BOTTOM);
     }
@@ -243,9 +237,6 @@ void loop() {
 
   // Run the steppers
   xstepper.run();
-  //ystepper.run();
-  //zstepper.run();
-  //astepper.run();
   loopCnt++;
 }
 
@@ -257,6 +248,7 @@ void moveBlinds(long newPosition) {
   // Check if we're moving down. If we are, bump the blind up so that the solenoid can disengage
   if (xstepper.currentPosition() < newPosition) {
     Serial.println("bumping up");
+    // TODO: Use MultiStepper for blocking call to make this easier?
     xstepper.runToNewPosition(xstepper.currentPosition() + SOLENOID_ENABLE_STEPPER_BUMP);  
     Serial.println("Done bump");
   }
@@ -323,18 +315,25 @@ boolean readyForAutoCmd() {
   return ((millis() - lastMoveAt) > AUTO_TRANSITION_INTERVAL);
 }
 
+void enableAllSteppers() {
+  xstepper.enableOutputs();
+}
+
+void disableAllSteppers() {
+  xstepper.disableOutputs();
+}
+
+boolean anySteppersNotAtDestination() {
+  return xstepper.distanceToGo() != 0;
+}
+
 void homeSteppers() {
+  Serial.println("Homing...");  
   homeStepper(&xstepper, X_STOP_PIN);
-  //homeStepper(&ystepper, Y_STOP_PIN);
-  //homeStepper(&zstepper, Z_STOP_PIN);
-  //homeStepper(&astepper, A_STOP_PIN);
 }
 
 void initializeSteppers() {
   initializeStepper(&xstepper);
-  //initializeStepper(&ystepper);
-  //initializeStepper(&zstepper);
-  //initializeStepper(&astepper);
 }
 
 void initializeFSMTransitions() {
@@ -437,12 +436,12 @@ void enableSolenoid() {
   analogWrite(SOLENOID, SOLENOID_PWM_LEVEL);
 }
 
-boolean atBottom() {
-  return xstepper.currentPosition() == bottomPosition;
+boolean atBottom(AccelStepper *stepper) {
+  return stepper->currentPosition() == bottomPosition;
 }
 
-boolean atTop() {
-  return xstepper.currentPosition() == (0 - SLIP_CORRECTION) || digitalRead(X_STOP_PIN) == LOW;
+boolean atTop(AccelStepper *stepper, int stopPin) {
+  return stepper->currentPosition() == (0 - SLIP_CORRECTION) || digitalRead(stopPin) == LOW;
 }
 
 boolean moveBlindsUpButtonActive() {
