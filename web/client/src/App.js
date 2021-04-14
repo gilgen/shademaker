@@ -13,50 +13,44 @@ class App extends Component {
 
   componentDidMount() {
     this.callApi()
-      .then(res => this.setState({ response: res.express }))
+      .then(res => this.setState({ response: JSON.stringify(res) }))
       .catch(err => console.log(err));
   }
 
   callApi = async () => {
-    const response = await fetch('/api/hello');
+    const response = await fetch('/api/blinds');
     const body = await response.json();
+    console.log("Received body: ", body);
     if (response.status !== 200) throw Error(body.message);
-
     return body;
   };
 
   handleSubmit = async e => {
     e.preventDefault();
-    const response = await fetch('/api/world', {
-      method: 'POST',
+    const response = await fetch('/api/blinds', {
+      method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ post: this.state.post }),
     });
+
     const body = await response.text();
 
     this.setState({ responseToPost: body });
   };
 
-render() {
+  render() {
+    let responseToGet = this.state.response;
+    if (!responseToGet) {
+      responseToGet = "Loading data from backend...";
+    }
     return (
       <div className="App">
         <header className="App-header">
           <img src={logo} className="App-logo" alt="logo" />
-          <p>
-            Edit <code>src/App.js</code> and save to reload.
-          </p>
-          <a
-            className="App-link"
-            href="https://reactjs.org"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Learn React
-          </a>
         </header>
-        <p>{this.state.response}</p>
+        <p>{responseToGet}</p>
         <form onSubmit={this.handleSubmit}>
           <p>
             <strong>Post to Server:</strong>
