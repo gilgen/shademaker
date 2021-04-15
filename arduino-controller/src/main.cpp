@@ -91,7 +91,7 @@ void onTransMovingToMovingByMoveCommand();
 #endif
 
 #define GEAR_RATIO 5.18181818L
-#define AUTO_TRANSITION_INTERVAL (unsigned long)21600000 // 6 hours (or use 100000 for testing)
+#define AUTO_TRANSITION_INTERVAL (unsigned long)18000000 // 5 hours (or use 100000 for testing)
 #define REVOLUTION (long)(STEPS_PER_SHAFT_REVOLUTION * GEAR_RATIO)
 #define MAX_SPEED REVOLUTION * 0.4 // The UNO can do just over 4000 steps/s :'(
 #define ACCELERATION MAX_SPEED * 1.8
@@ -101,6 +101,8 @@ void onTransMovingToMovingByMoveCommand();
 #define SLIP_CORRECTION 2 * REVOLUTION
 #define SOLENOID_PWM_LEVEL 110
 #define CYCLES_BEFORE_SOLENOID_LOW_POWER 30000L
+
+// I2C commands
 #define STOP_COMMAND 101 
 #define NOOP -1
 
@@ -119,7 +121,7 @@ long desiredBlindPosition;
 long bottomPosition;
 int loopCnt = 0;
 int i2cAddress;
-int lastReceivedCommand = -1;
+int lastReceivedCommand = NOOP;
 
 // Stepper
 AccelStepper stepper = AccelStepper(AccelStepper::DRIVER, STEP_PIN, DIRECTION);
@@ -329,8 +331,6 @@ void i2cStateRequestHandler() {
   buffer[0] = roundf(stepper.currentPosition() * 100.0 / bottomPosition);
   buffer[1] = roundf(getDesiredBlindPosition() * 100.0 / bottomPosition);
   Wire.write(buffer, 2);
-  // Wire.write((int)((float)(stepper.currentPosition() / (float)bottomPosition)*100));
-  // Wire.write((int)((float)(getDesiredBlindPosition() / (float)bottomPosition)*100));
 }
 
 void receiveI2CCommand(int bytes) {
@@ -342,7 +342,8 @@ void receiveI2CCommand(int bytes) {
   if(isValidCommand(cmd)) {
     setReceivedCommand(cmd);
   } else {
-    // Serial.println("Invalid command");
+    Serial.print("Invalid command: ");
+    Serial.println(cmd);
   }
 }
 
