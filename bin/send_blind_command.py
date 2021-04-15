@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from smbus import SMBus
 import sys
 from blind_addresses import blind_address_mappings
