@@ -14,10 +14,15 @@ boolean readyForAutoCmd();
 boolean isBrightOutside();
 boolean stopPinActive();
 boolean atSetMidpointPosition();
+boolean isValidCommand(int command);
 int getI2CAddress();
+void handleReceivedCommand();
 long getDesiredBlindPosition();
+void receiveI2CCommand(int numByets);
+void i2cStateRequestHandler();
+void setReceivedCommand(int command);
+int getReceivedCommand();
 void setDesiredBlindPosition(long newPosition);
-void handleCommand(int bytesSent);
 void homeStepper();
 void moveBlinds(long longPosition);
 void stopBlinds();
@@ -38,6 +43,7 @@ void onTransMovingToStoppedByMotorsAtTop();
 void onTransStoppedToMovingByDownClick();
 void onTransStoppedToMovingByUpClick();
 void onTransStoppedToMovingByMoveToPosition();
+void onTransMovingToMovingByMoveCommand();
 
 #define DEBUG_MODE true
 
@@ -95,7 +101,8 @@ void onTransStoppedToMovingByMoveToPosition();
 #define SLIP_CORRECTION 2 * REVOLUTION
 #define SOLENOID_PWM_LEVEL 110
 #define CYCLES_BEFORE_SOLENOID_LOW_POWER 30000L
-#define STOP_COMMAND -1
+#define STOP_COMMAND 101 
+#define NOOP -1
 
 // FSM events
 #define AUTO_DOUBLE_CLICK   1
@@ -105,13 +112,14 @@ void onTransStoppedToMovingByMoveToPosition();
 #define STOP                6
 #define MOVE_COMMAND        7
 
-String serialCmdString = "";
+boolean isHoming = false;
 unsigned long lastMoveAt = 0;
 unsigned long startedAt;
 long desiredBlindPosition;
 long bottomPosition;
 int loopCnt = 0;
 int i2cAddress;
+int lastReceivedCommand = -1;
 
 // Stepper
 AccelStepper stepper = AccelStepper(AccelStepper::DRIVER, STEP_PIN, DIRECTION);
@@ -127,13 +135,16 @@ State movingState(&onMovingStateEnter, NULL, NULL);
 Fsm fsm(&stoppedState);
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
   Serial.print("Initializing\n");
   initializeBottomPosition();
   initializePinIO();
   disableSolenoid();  
   initializeStepper();
   i2cAddress = getI2CAddress();
+  Wire.begin(i2cAddress);
+  Wire.onReceive(receiveI2CCommand);
+  Wire.onRequest(i2cStateRequestHandler);
   homeStepper();
   initializeSwitchHandlers();
   initializeFSMTransitions();
@@ -149,6 +160,8 @@ void loop() {
   } else if (stepper.distanceToGo() == 0) {
     fsm.trigger(STOP);
   }
+
+  handleReceivedCommand();
 
   // Only tick periodically to speed up the run loop. This
   // allows the motors to run a bit smoother
@@ -189,6 +202,7 @@ void initializeFSMTransitions() {
   fsm.add_transition(&stoppedState, &movingState, DOWN_CLICK, &onTransStoppedToMovingByDownClick);
   fsm.add_transition(&stoppedState, &movingState, UP_CLICK, &onTransStoppedToMovingByUpClick);
   fsm.add_transition(&stoppedState, &movingState, MOVE_COMMAND, NULL);
+  fsm.add_transition(&movingState, &movingState, MOVE_COMMAND, &onTransMovingToMovingByMoveCommand);
   fsm.add_transition(&movingState, &stoppedState, STOP, NULL);
   fsm.add_transition(&movingState, &stoppedState, DOWN_CLICK, NULL);
   fsm.add_transition(&movingState, &stoppedState, UP_CLICK, NULL);
@@ -220,13 +234,22 @@ void onTransStoppedToMovingByDownClick() {
   setDesiredBlindPosition(bottomPosition);
 }
 
+void onTransMovingToMovingByMoveCommand() {
+  // Serial.println("In onTransMovingToMovingByMovingCommand");
+  // if (stepper.currentPosition() > getDesiredBlindPosition()) {
+  //   stepper.moveTo(getDesiredBlindPosition());
+  // }
+}
+
 void onMovingStateEnter() {
+  // Serial.println("in onMovingStateEnter");
   moveBlinds(getDesiredBlindPosition());
 }
 
 void moveBlinds(long newPosition) {
-  Serial.print("Moving blinds to: ");
-  Serial.println(newPosition);
+  // Serial.print("Moving blinds to: ");
+  // Serial.println(newPosition);
+
   lastMoveAt = millis();
   enableSolenoid();
   stepper.enableOutputs();
@@ -263,40 +286,74 @@ void runAutoModeRoutines() {
   }
 }
 
-void handleCommand(int cmd) {
-  // Serial.print("Received command: ");
-  // Serial.println(cmd);
-  if (cmd == STOP_COMMAND) {
-    fsm.trigger(STOP);
-  } else if (cmd >= 0 && cmd <= 100) {
-    long newPosition = bottomPosition * cmd / 100;
-    if (newPosition == 0) {
-      newPosition = (0 - SLIP_CORRECTION);
-    }
-    // Serial.print("Desired position from command: ");
-    // Serial.println(newPosition);
-    if (newPosition != getDesiredBlindPosition()) {
-      // Serial.println("Desired position is different from current position. Moving");
-      setDesiredBlindPosition(newPosition);
+boolean isValidCommand(int command) {
+  return command >= 0 && command <= 101;
+}
+
+void setReceivedCommand(int command) {
+  lastReceivedCommand = command;
+}
+
+int getReceivedCommand() {
+  return lastReceivedCommand;
+}
+
+void handleReceivedCommand() {
+  int command = getReceivedCommand();
+  if (command != NOOP) {
+    // Serial.print("Received a new command: ");
+    // Serial.println(command);
+    if (command == STOP_COMMAND) {
+      // Serial.println("Triggering a STOP");
       fsm.trigger(STOP);
-      fsm.trigger(MOVE_COMMAND);
     } else {
-      // Serial.println("Command is the same as the current position. Skipping");
+      long newPosition = bottomPosition * command / 100;
+      if (newPosition == 0) {
+        newPosition = (0 - SLIP_CORRECTION);
+      }
+      if (newPosition != getDesiredBlindPosition()) {
+        // Serial.println("Desired position is different from current position. Moving");
+        setDesiredBlindPosition(newPosition);
+        fsm.trigger(MOVE_COMMAND);
+      } else {
+        // Serial.println("Command is the same as the current position. Skipping");
+      }
     }
+    setReceivedCommand(NOOP);
   }
 }
 
-// TODO: Implement I2C Wire library method to send commands
-// from Raspberry to blind
+void i2cStateRequestHandler() {
+  // Serial.println("Received request for state");
+  byte buffer[2];
+  buffer[0] = roundf(stepper.currentPosition() * 100.0 / bottomPosition);
+  buffer[1] = roundf(getDesiredBlindPosition() * 100.0 / bottomPosition);
+  Wire.write(buffer, 2);
+  // Wire.write((int)((float)(stepper.currentPosition() / (float)bottomPosition)*100));
+  // Wire.write((int)((float)(getDesiredBlindPosition() / (float)bottomPosition)*100));
+}
+
+void receiveI2CCommand(int bytes) {
+  int cmd = Wire.read();
+  // Serial.print("Received I2C command: ");
+  // Serial.println(cmd);
+  // Serial.print("Bytes argument: ");
+  // Serial.println(bytes);
+  if(isValidCommand(cmd)) {
+    setReceivedCommand(cmd);
+  } else {
+    // Serial.println("Invalid command");
+  }
+}
 
 // Just for testing out the command functionality
-void serialEvent() {
-  while(Serial.available()) {
-    int cmd = Serial.parseInt();
-    // Serial.println("Received command: " + cmd);
-    handleCommand(cmd);
-  }
-}
+// void serialEvent() {
+//   while(Serial.available()) {
+//     int cmd = Serial.parseInt();
+//     // Serial.println("Received command: " + cmd);
+//     handleCommand(cmd);
+//   }
+// }
 
 long getDesiredBlindPosition() {
   return desiredBlindPosition;
@@ -363,7 +420,9 @@ void initializeStepper() {
 }
 
 void homeStepper() {
+  Serial.println("in homeStepper");
   Serial.println("Homing...");
+  isHoming = true;
   stepper.enableOutputs();
   enableSolenoid();
   stepper.moveTo(-5*REVOLUTION);
@@ -379,12 +438,13 @@ void homeStepper() {
   stepper.runToPosition();
   disableSolenoid();
   stepper.disableOutputs();
-  if(stopPinActive()) {
+  if(!stopPinActive()) {
     Serial.println("Home switch isn't activated");
   } else {
     Serial.println("Stopped via home switch");
   }
   setCurrentPositionAsHome();
+  isHoming = false;
   Serial.println("Set home position");
 }
 
@@ -445,17 +505,18 @@ boolean autoModeEnabled() {
 }
 
 int getI2CAddress() {
-  Serial.println("Fetching I2C address");
+  Serial.print("Fetching I2C address...found: 0x");
   int address = 0;
-  if (digitalRead(I2C_0) == LOW)
+  if (digitalRead(I2C_4) == LOW)
     address += 1;
-  if (digitalRead(I2C_1) == LOW)
+  if (digitalRead(I2C_3) == LOW)
     address += 2;
   if (digitalRead(I2C_2) == LOW)
     address += 4;
-  if (digitalRead(I2C_3) == LOW)
+  if (digitalRead(I2C_1) == LOW)
     address += 8;
-  if (digitalRead(I2C_4) == LOW)
+  if (digitalRead(I2C_0) == LOW)
     address += 16;
+  Serial.println(address, HEX);
   return(address);
 }
