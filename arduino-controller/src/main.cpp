@@ -341,9 +341,6 @@ void receiveI2CCommand(int bytes) {
   // Serial.println(bytes);
   if(isValidCommand(cmd)) {
     setReceivedCommand(cmd);
-  } else {
-    Serial.print("Invalid command: ");
-    Serial.println(cmd);
   }
 }
 
