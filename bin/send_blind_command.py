@@ -2,7 +2,7 @@
 
 from smbus2 import SMBus
 import sys
-from blind_addresses import blind_addresses
+from blind_addresses import blind_address_mappings
 
 # This command is intended to be executed as:
 # /usr/bin/python send_cmd.py <blind number list> <command>
@@ -15,8 +15,8 @@ blinds = list(map(int, sys.argv[1].split(',')))
 with SMBus(1) as bus:
     for i in blinds:
         try:
-            bus.write_byte(blind_addresses[i], command)
+            bus.write_byte(blind_address_mappings[i], command)
             print('Sent {} to blind {}'.format(command, i))
         except:
-            print('Error sending command to blind: {}'.format(i))
+            print('Blind {} unreachable'.format(i))
             continue
