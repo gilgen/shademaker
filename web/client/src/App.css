@@ -7,36 +7,63 @@
   height: 80px;
 }
 
-.App-header {
-  min-height: 50%;
-  padding-bottom: 10px;
-  background-color: #222;
-  height: 150px;
-  padding: 20px;
-  color: white;
-}
-
-.App-intro {
-  font-size: large;
-}
-
 @keyframes App-logo-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 
-.blind-height-indicator {
-  padding-bottom: 15px;
-}
-
-.blind-heights-container {
-  width: 800px;
-  border: 1px solid grey;
-  text-align: left;
-  margin-left: auto;
-  margin-right: auto;
+* {
+  /* margin: 0; */
+  /* padding: 0; */
+  padding-inline-start: 0
 }
 
 pre {
   text-align: left;
 }
+
+/* .App-header { */
+/*   min-height: 50%; */
+/*   /* padding-bottom: 10px; */ */
+/*   background-color: #222; */
+/*   height: 150px; */
+/*   padding: 20px; */
+/*   color: white; */
+/* } */
+
+ul.blind-heights-container {
+  /* width: 1200px; */
+  /* border: 1px solid grey; */
+  /* margin-left: auto; */
+  /* margin-right: auto; */
+  /* margin-top: 40px !important; */
+  /* margin-left: -40px !important; */
+  /* margin-padding-start: unset; */
+}
+
+.blind-heights-container li {
+  /* padding-bottom: 40px; */
+  width: 85px;
+}
+
+.blind-height-indicator {
+  padding-bottom: 15px;
+  display: inline-block;
+  width: auto;
+  padding: 15px;
+}
+
+.actions {
+  margin-bottom: 20px;
+  height: 200px;
+}
+
+.actions button {
+  display: block;
+  width: 120px;
+}
+
+.blindset-name {
+  /* background-color: grey; */
+}
+

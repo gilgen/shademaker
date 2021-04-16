@@ -1,17 +1,69 @@
-import React, { Component } from 'react';
+import React, { useCallback, Component } from 'react';
 import Slider from '@material-ui/core/Slider';
-
+import Button from '@material-ui/core/Button';
+import _ from 'lodash';
+import { withStyles } from '@material-ui/core/styles';
 import logo from './logo.svg';
-
 import './App.css';
 
+const ThumblessSlider = withStyles({
+  // thumb: {
+  //   width: "15px !important",
+  // },
+  root: {
+  },
+  thumb: {
+    height: 0,
+    width: 0,
+    display: 'none'
+  },
+  track: {
+    width: "8px !important",
+  },
+  rail: {
+    width: "8px !important"
+  }
+})(Slider);
+
+const PrettoSlider = withStyles({
+  root: {
+    color: '#52af77',
+  },
+  thumb: {
+    height: 25,
+    width: 25,
+    backgroundColor: '#fff',
+    border: '2px solid currentColor',
+    marginTop: -8,
+    marginLeft: "-7px !important",
+    '&:focus, &:hover, &$active': {
+      boxShadow: 'inherit',
+    },
+  },
+  active: {},
+  track: {
+    width: "5px !important",
+    borderRadius: "4px",
+  },
+  rail: {
+    width: "5px !important",
+    borderRadius: "4px",
+  },
+})(Slider);
+
 class BlindHeightIndicator extends Component {
+
   state = {
     blindsetName: '',
-    blindNums: []
+    blindNums: [],
+    blindStates: {}
   }
 
   cmdClick(command) {
+    this.sendCommand(command);
+  }
+
+  sendCommand(command) {
     let blindsetName = this.props.blindsetName;
     let blinds = this.props.blindNums;
     console.log("Received command: ", command);
@@ -28,21 +80,62 @@ class BlindHeightIndicator extends Component {
     });
   }
 
-  downClicked() {
-    console.log("Down clicked");
+  isMoving() {
+    if(!this.props.blindStates) {
+      return false;
+    }
+    let isMoving = false;
+    this.props.blindNums.forEach((num) => {
+      let state = this.props.blindStates[num];
+      if (state.cur !== state.set) {
+        isMoving = true;
+        return;
+      }
+    });
+    return isMoving;
+  }
+
+  sliderChanged(e, newHeight) {
+    console.log("Slider changed", e, newHeight);
+    console.log(this);
+    this.throttledDebouncedSendCommand(newHeight);
   }
 
   render() {
+
+    let currentHeight = 100, setHeight = 100, firstActiveBlindState;
+
+    const handleSliderCommit = (event, newValue) => {
+      this.sendCommand(100-newValue);
+    };
+
+    this.props.blindNums.find((n) => {
+      if (this.props.blindStates[n].cur !== "unreachable") {
+        firstActiveBlindState = this.props.blindStates[n];
+        return true;
+      }
+    });
+
+    if (firstActiveBlindState) {
+      currentHeight = 100 - firstActiveBlindState.cur;
+      setHeight = firstActiveBlindState.set;
+    }
+
     return (
-      <div className="blind-height-indicator">
-        Name: {this.props.blindsetName}<br />
-        Nums: {this.props.blindNums.join(", ")}
+      <li className="blind-height-indicator">
         <div className="actions">
-          <button onClick={() => this.cmdClick(100)}>Up</button>
-          <button onClick={() => this.cmdClick(0)}>Down</button>
-          <button onClick={() => this.cmdClick(101)}>Stop</button>
+          {/*
+          <Button variant="contained" color="primary" onClick={() => this.cmdClick(0)}>Put blinds up</Button>
+          <Button variant="contained" disabled={!this.isMoving()} onClick={() => this.cmdClick(101)}>Stop</Button>
+          <Button variant="contained" color="primary" onClick={() => this.cmdClick(100)}>Put blinds down</Button>
+          */}
+          <PrettoSlider defaultValue={currentHeight} onChangeCommitted={handleSliderCommit} orientation="vertical" track="inverted" />
+          <ThumblessSlider value={currentHeight} orientation="vertical" track="inverted" />
         </div>
-      </div>
+        <div className="blindset-name">
+          {this.props.blindsetName}
+        </div>
+      </li>
     );
   }
 }
@@ -56,12 +149,12 @@ class App extends Component {
   };
 
   blindSets = {
-    "All"        : [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],
-    "East"       : [1,2,3,4,5,6,7,8,9],
-    "North"      : [10,11,12],
-    "West"       : [13,14,15],
-    "North Door" : [10],
-    "West Door"  : [14]
+    "All"        : ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15'],
+    "East"       : ['1','2','3','4','5','6','7','8','9'],
+    "North"      : ['10','11','12'],
+    "West"       : ['13','14','15'],
+    "North Door" : ['10'],
+    "West Door"  : ['14']
   }
 
   // Poll the arduinos for their state
@@ -106,30 +199,35 @@ class App extends Component {
 
   render() {
     let blindStates = this.state.blindStates;
-    if (!blindStates) {
+    let blindHeightsContainer;
+    if (blindStates) {
       blindStates = "Loading blind states...";
+      blindHeightsContainer = <ul className="blind-heights-container">
+        {Object.keys(this.blindSets).map((blindSetName, i) => {
+          return <BlindHeightIndicator
+            key={blindSetName}
+            blindStates={this.state.blindStates}
+            blindsetName={blindSetName}
+            blindNums={this.blindSets[blindSetName]}
+          />
+        })}
+      </ul>
     } else {
       blindStates = JSON.stringify(blindStates, null, 2);
+      blindHeightsContainer = "Loading blind heights...";
     }
 
     return (
       <div className="App">
+        {/*}
         <header className="App-header">
           <img src={logo} className="App-logo" alt="logo" />
         </header>
+        */}
 
-        <div className="blind-heights-container">
-          {Object.keys(this.blindSets).map((blindSetName, i) => {
-            return <BlindHeightIndicator
-              key={blindSetName}
-              blindStates={blindStates}
-              blindsetName={blindSetName}
-              blindNums={this.blindSets[blindSetName]}
-            />
-          })}
-        </div>
+        {blindHeightsContainer}
 
-        <pre>{blindStates}</pre>
+        {/*<pre>{blindStates}</pre>*/}
       </div>
     );
   }
