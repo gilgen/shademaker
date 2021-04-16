@@ -101,10 +101,11 @@ void onTransMovingToMovingByMoveCommand();
 #define SLIP_CORRECTION 2 * REVOLUTION
 #define SOLENOID_PWM_LEVEL 110
 #define CYCLES_BEFORE_SOLENOID_LOW_POWER 30000L
+#define HOMING_STATE_RETURN_VALUE 200
 
 // I2C commands
 #define STOP_COMMAND 101 
-#define NOOP -1
+#define NOOP 200
 
 // FSM events
 #define AUTO_DOUBLE_CLICK   1
@@ -120,7 +121,6 @@ unsigned long startedAt;
 long desiredBlindPosition;
 long bottomPosition;
 int loopCnt = 0;
-int i2cAddress;
 int lastReceivedCommand = NOOP;
 
 // Stepper
@@ -143,8 +143,7 @@ void setup() {
   initializePinIO();
   disableSolenoid();  
   initializeStepper();
-  i2cAddress = getI2CAddress();
-  Wire.begin(i2cAddress);
+  Wire.begin(getI2CAddress());
   Wire.onReceive(receiveI2CCommand);
   Wire.onRequest(i2cStateRequestHandler);
   homeStepper();
@@ -289,7 +288,7 @@ void runAutoModeRoutines() {
 }
 
 boolean isValidCommand(int command) {
-  return command >= 0 && command <= 101;
+  return (command >= 0 && command <= 101) || command == NOOP;
 }
 
 void setReceivedCommand(int command) {
@@ -328,8 +327,22 @@ void handleReceivedCommand() {
 void i2cStateRequestHandler() {
   // Serial.println("Received request for state");
   byte buffer[2];
-  buffer[0] = roundf(stepper.currentPosition() * 100.0 / bottomPosition);
-  buffer[1] = roundf(getDesiredBlindPosition() * 100.0 / bottomPosition);
+  long massagedDesiredPosition, setPosition;
+
+  if (isHoming) {
+    massagedDesiredPosition = setPosition = HOMING_STATE_RETURN_VALUE;
+  } else {
+    massagedDesiredPosition = getDesiredBlindPosition();
+    if (massagedDesiredPosition < 0) {
+      massagedDesiredPosition = 0;
+    }
+    massagedDesiredPosition = roundf(massagedDesiredPosition * 100.0 / bottomPosition);
+    setPosition = roundf(stepper.currentPosition() * 100.0 / bottomPosition);
+  }
+
+  buffer[0] = setPosition;
+  buffer[1] = massagedDesiredPosition;
+  // Serial.println((String)"Sending: " + buffer[0] + " and " + buffer[1]);
   Wire.write(buffer, 2);
 }
 
@@ -341,6 +354,9 @@ void receiveI2CCommand(int bytes) {
   // Serial.println(bytes);
   if(isValidCommand(cmd)) {
     setReceivedCommand(cmd);
+  } else {
+    Serial.print("Invalid command: ");
+    Serial.println(cmd);
   }
 }
 
