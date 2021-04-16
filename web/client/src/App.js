@@ -1,10 +1,22 @@
-import React, { useCallback, Component } from 'react';
+import React, { Component } from 'react';
 import Slider from '@material-ui/core/Slider';
 import Button from '@material-ui/core/Button';
-import _ from 'lodash';
-import { withStyles } from '@material-ui/core/styles';
+import Divider from '@material-ui/core/Divider';
+import { withStyles, MuiThemeProvider, createMuiTheme } from "@material-ui/core/styles";
+import CssBaseline from "@material-ui/core/CssBaseline";
+import { ThemeProvider } from '@material-ui/styles';
+
 import logo from './logo.svg';
+import _ from 'lodash';
+
 import './App.css';
+
+
+const darkTheme = createMuiTheme({
+  palette: {
+    type: 'dark',
+  },
+});
 
 const ThumblessSlider = withStyles({
   // thumb: {
@@ -35,7 +47,7 @@ const PrettoSlider = withStyles({
     backgroundColor: '#fff',
     border: '2px solid currentColor',
     marginTop: -8,
-    marginLeft: "-7px !important",
+    marginLeft: "-9px !important",
     '&:focus, &:hover, &$active': {
       boxShadow: 'inherit',
     },
@@ -135,6 +147,7 @@ class BlindHeightIndicator extends Component {
         <div className="blindset-name">
           {this.props.blindsetName}
         </div>
+        <Divider orientation="vertical" flexItem />
       </li>
     );
   }
@@ -205,11 +218,11 @@ class App extends Component {
       blindHeightsContainer = <ul className="blind-heights-container">
         {Object.keys(this.blindSets).map((blindSetName, i) => {
           return <BlindHeightIndicator
-            key={blindSetName}
-            blindStates={this.state.blindStates}
-            blindsetName={blindSetName}
-            blindNums={this.blindSets[blindSetName]}
-          />
+              key={blindSetName}
+              blindStates={this.state.blindStates}
+              blindsetName={blindSetName}
+              blindNums={this.blindSets[blindSetName]}
+            />
         })}
       </ul>
     } else {
@@ -218,17 +231,12 @@ class App extends Component {
     }
 
     return (
-      <div className="App">
-        {/*}
-        <header className="App-header">
-          <img src={logo} className="App-logo" alt="logo" />
-        </header>
-        */}
-
-        {blindHeightsContainer}
-
-        {/*<pre>{blindStates}</pre>*/}
-      </div>
+      <MuiThemeProvider theme={darkTheme}>
+        <CssBaseline />
+        <div className="App" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', }}>
+          {blindHeightsContainer}
+        </div>
+      </MuiThemeProvider>
     );
   }
 }

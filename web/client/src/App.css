@@ -1,5 +1,13 @@
 .App {
   text-align: center;
+  display: "flex";
+  justify-content: "center";
+  align-items: "center";
+}
+
+html, body, #root, #root>div {
+  height: 100%;
+  margin: 0;
 }
 
 .App-logo {
@@ -13,8 +21,6 @@
 }
 
 * {
-  /* margin: 0; */
-  /* padding: 0; */
   padding-inline-start: 0
 }
 
@@ -22,35 +28,29 @@ pre {
   text-align: left;
 }
 
-/* .App-header { */
-/*   min-height: 50%; */
-/*   /* padding-bottom: 10px; */ */
-/*   background-color: #222; */
-/*   height: 150px; */
-/*   padding: 20px; */
-/*   color: white; */
-/* } */
-
 ul.blind-heights-container {
-  /* width: 1200px; */
-  /* border: 1px solid grey; */
-  /* margin-left: auto; */
-  /* margin-right: auto; */
-  /* margin-top: 40px !important; */
-  /* margin-left: -40px !important; */
-  /* margin-padding-start: unset; */
+  padding-left: 0px;
+  padding-right: 0px;
 }
 
 .blind-heights-container li {
-  /* padding-bottom: 40px; */
-  width: 85px;
+  width: 120px;
+}
+
+/* .MuiSlider-track:not(.MuiSlider-active) { */
+/*   transition: height 1s ease-in; */
+/* } */
+
+.MuiSlider-track {
+  transition: height 1s ease-in-out;
 }
 
 .blind-height-indicator {
   padding-bottom: 15px;
   display: inline-block;
   width: auto;
-  padding: 15px;
+  padding: 15px 5px;
+
 }
 
 .actions {
@@ -64,6 +64,6 @@ ul.blind-heights-container {
 }
 
 .blindset-name {
-  /* background-color: grey; */
+  font-weight: bold;
 }
 
