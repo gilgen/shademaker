@@ -73,7 +73,7 @@ class App extends Component {
     let blindStates = this.state.blindStates;
     let curVal = 100;
     if (!blindStates) {
-      blindStates = "Loading blind states...";
+      blindStates = "Loading blind states... :)";
     } else {
       curVal = blindStates["2"]["cur"];
     }
