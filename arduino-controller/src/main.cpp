@@ -302,10 +302,7 @@ int getReceivedCommand() {
 void handleReceivedCommand() {
   int command = getReceivedCommand();
   if (command != NOOP) {
-    // Serial.print("Received a new command: ");
-    // Serial.println(command);
     if (command == STOP_COMMAND) {
-      // Serial.println("Triggering a STOP");
       fsm.trigger(STOP);
     } else {
       long newPosition = bottomPosition * command / 100;
@@ -313,11 +310,10 @@ void handleReceivedCommand() {
         newPosition = (0 - SLIP_CORRECTION);
       }
       if (newPosition != getDesiredBlindPosition()) {
-        // Serial.println("Desired position is different from current position. Moving");
         setDesiredBlindPosition(newPosition);
         fsm.trigger(MOVE_COMMAND);
       } else {
-        // Serial.println("Command is the same as the current position. Skipping");
+        fsm.trigger(STOP);
       }
     }
     setReceivedCommand(NOOP);
