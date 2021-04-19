@@ -1,16 +1,8 @@
 import React, { Component } from 'react';
-import Slider from '@material-ui/core/Slider';
-import Button from '@material-ui/core/Button';
-import Divider from '@material-ui/core/Divider';
+import { Slider } from '@material-ui/core';
 import { withStyles, MuiThemeProvider, createMuiTheme } from "@material-ui/core/styles";
 import CssBaseline from "@material-ui/core/CssBaseline";
-import { ThemeProvider } from '@material-ui/styles';
-
-import logo from './logo.svg';
-import _ from 'lodash';
-
 import './App.css';
-
 
 const darkTheme = createMuiTheme({
   palette: {
@@ -19,11 +11,6 @@ const darkTheme = createMuiTheme({
 });
 
 const ThumblessSlider = withStyles({
-  // thumb: {
-  //   width: "15px !important",
-  // },
-  root: {
-  },
   thumb: {
     height: 0,
     width: 0,
@@ -37,7 +24,7 @@ const ThumblessSlider = withStyles({
   }
 })(Slider);
 
-const PrettoSlider = withStyles({
+const SetSlider = withStyles({
   root: {
     color: '#52af77',
   },
@@ -68,19 +55,43 @@ class BlindHeightIndicator extends Component {
   state = {
     blindsetName: '',
     blindNums: [],
-    blindStates: {}
+    blindStates: {},
+    setHeight: 100,
+    isMovingSetSlider: false
   }
 
-  cmdClick(command) {
-    this.sendCommand(command);
+  componentDidMount() {
+    this.interval = setInterval(this.tick, 1000);
+    let firstActiveBlindState = this.getFirstActiveBlindState();
+    if (firstActiveBlindState) {
+      this.setState({ setHeight: 100-firstActiveBlindState.set });
+    }
+  }
+
+  tick = () => {
+    let firstActiveBlindState = this.getFirstActiveBlindState();
+    if (firstActiveBlindState && !this.state.isMovingSetSlider) {
+      this.setState({ setHeight: 100-firstActiveBlindState.set });
+    }
+  }
+
+  getFirstActiveBlindState() {
+    let firstActiveBlindState;
+    this.props.blindNums.find((n) => {
+      if (this.props.blindStates[n].cur !== "unreachable") {
+        firstActiveBlindState = this.props.blindStates[n];
+        return true;
+      }
+      return false;
+    });
+    return firstActiveBlindState;
   }
 
   sendCommand(command) {
-    let blindsetName = this.props.blindsetName;
     let blinds = this.props.blindNums;
     console.log("Received command: ", command);
     console.log(" -> Sending to:", blinds);
-    const response = fetch('/api/blinds', {
+    fetch('/api/blinds', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -107,47 +118,38 @@ class BlindHeightIndicator extends Component {
     return isMoving;
   }
 
-  sliderChanged(e, newHeight) {
-    console.log("Slider changed", e, newHeight);
-    console.log(this);
-    this.throttledDebouncedSendCommand(newHeight);
+  setSliderChanged = (e, newVal) => {
+    e.preventDefault();
+    this.setState({ setHeight: newVal, isMovingSetSlider: true });
+  }
+
+  handleSliderCommit = (event, newValue) => {
+    this.sendCommand(100-newValue);
+    setTimeout(() => {
+      this.setState({ isMovingSetSlider: false });
+    }, 1500);
   }
 
   render() {
+    let firstActiveBlindstate = this.getFirstActiveBlindState();
+    let curHeight=100;
 
-    let currentHeight = 100, setHeight = 100, firstActiveBlindState;
-
-    const handleSliderCommit = (event, newValue) => {
-      this.sendCommand(100-newValue);
-    };
-
-    this.props.blindNums.find((n) => {
-      if (this.props.blindStates[n].cur !== "unreachable") {
-        firstActiveBlindState = this.props.blindStates[n];
-        return true;
+    if (firstActiveBlindstate) {
+      curHeight = 100-firstActiveBlindstate.cur;
+      if (!this.isMoving) {
+        this.state.setHeight = 100-firstActiveBlindstate.set;
       }
-    });
-
-    if (firstActiveBlindState) {
-      currentHeight = 100 - firstActiveBlindState.cur;
-      setHeight = firstActiveBlindState.set;
     }
 
     return (
       <li className="blind-height-indicator">
         <div className="actions">
-          {/*
-          <Button variant="contained" color="primary" onClick={() => this.cmdClick(0)}>Put blinds up</Button>
-          <Button variant="contained" disabled={!this.isMoving()} onClick={() => this.cmdClick(101)}>Stop</Button>
-          <Button variant="contained" color="primary" onClick={() => this.cmdClick(100)}>Put blinds down</Button>
-          */}
-          <PrettoSlider defaultValue={currentHeight} onChangeCommitted={handleSliderCommit} orientation="vertical" track="inverted" />
-          <ThumblessSlider value={currentHeight} orientation="vertical" track="inverted" />
+          <SetSlider onChange={this.setSliderChanged} value={this.state.setHeight} onChangeCommitted={this.handleSliderCommit} orientation="vertical" track="inverted" />
+          <ThumblessSlider value={curHeight} orientation="vertical" track="inverted" />
         </div>
         <div className="blindset-name">
           {this.props.blindsetName}
         </div>
-        <Divider orientation="vertical" flexItem />
       </li>
     );
   }
@@ -164,7 +166,7 @@ class App extends Component {
   blindSets = {
     "All"        : ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15'],
     "East"       : ['1','2','3','4','5','6','7','8','9'],
-    "North"      : ['10','11','12'],
+    "North"      : ['11','10','12'], // This is purposely out of order to prevent slider-child-changing-parent
     "West"       : ['13','14','15'],
     "North Door" : ['10'],
     "West Door"  : ['14']
