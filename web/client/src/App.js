@@ -179,7 +179,7 @@ class BlindHeightIndicator extends Component {
       //     labelPlacement="bottom"
       //   />
       // </FormGroup>
-        autoToggleMarkup = <Switch checked={this.state.autoEnabled} onChange={toggleAuto} />
+      autoToggleMarkup = <Switch checked={this.state.autoEnabled} onChange={toggleAuto} />
     } else {
       autoToggleMarkup = '';
     }
@@ -222,9 +222,9 @@ class App extends Component {
   };
 
   blindSets = {
-    // "All"        : {
-    //   nums: ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15']
-    // },
+    "All"        : {
+      nums: ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15']
+    },
     "East"       : {
       nums: ['2','1','3','4','5','6','7','8','9'],
       autoSensor: 0

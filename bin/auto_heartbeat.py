@@ -19,7 +19,6 @@ GPIO.setmode(GPIO.BCM)
 def light_sensor_low(sensor):
     pin = auto_sensors[sensor]['GPIO']
     GPIO.setup(pin, GPIO.IN)
-    print "Sensor {} value: {}".format(sensor, GPIO.input(pin))
     return GPIO.input(pin)
 
 # For the log
@@ -41,10 +40,11 @@ for sensor in auto_sensors:
             if light_sensor_low(sensor):
                 cmd = 0
             blindNums = ','.join(map(str, auto_sensors[sensor]['blindNums']))
-            cmd = '{} {} {} {}'.format(BLIND_COMMAND_FILE, blindNums, cmd, sensor)
-            print "Enough time has passed. Sending auto command: " + cmd
-            output = os.system(cmd)
-            auto_states[sensor]['lastCommandAt'] = current_time
+            cmd = '{} {} {}'.format(BLIND_COMMAND_FILE, blindNums, cmd)
+            print "Sensor {}: Sending auto command: {}".format(sensor, cmd)
+            os.system(cmd)
         else:
-            print "Not enough time has passed since last auto command"
+            print "Sensor {}: Not enough time has passed since last auto command".format(sensor)
+    else:
+        print "Sensor {}: Not enabled right now".format(sensor)
 
