@@ -48,17 +48,16 @@ ul.blind-heights-container {
 .blind-height-indicator {
   padding-bottom: 15px;
   display: inline-block;
-  width: auto;
   padding: 15px 5px;
-
+  vertical-align: top;
 }
 
-.actions {
+.sliders {
   margin-bottom: 20px;
-  height: 200px;
+  height: 180px;
 }
 
-.actions button {
+.sliders button {
   display: block;
   width: 120px;
 }

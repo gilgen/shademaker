@@ -2,13 +2,16 @@ import React, { Component } from 'react';
 import { Slider } from '@material-ui/core';
 import { withStyles, MuiThemeProvider, createMuiTheme } from "@material-ui/core/styles";
 import CssBaseline from "@material-ui/core/CssBaseline";
-import './App.css';
-
-
+import Snackbar from '@material-ui/core/Snackbar';
+// import Alert from '@material-ui/lab/Alert';
 import Switch from '@material-ui/core/Switch';
-import FormGroup from '@material-ui/core/FormGroup';
-import FormControlLabel from '@material-ui/core/FormControlLabel';
+import { Alert } from '@material-ui/core';
 
+// If you want the auto labelling, uncomment these
+// import FormGroup from '@material-ui/core/FormGroup';
+// import FormControlLabel from '@material-ui/core/FormControlLabel';
+
+import './App.css';
 
 const darkTheme = createMuiTheme({
   palette: {
@@ -65,7 +68,8 @@ class BlindHeightIndicator extends Component {
     autoStates: {},
     setHeight: 100,
     isMovingSetSlider: false,
-    autoEnabled: false
+    autoEnabled: false,
+    autoSwitchNotificationVisible: false
   }
 
   componentDidMount() {
@@ -163,19 +167,21 @@ class BlindHeightIndicator extends Component {
         body: JSON.stringify({ is_enabled: newAutoState }),
       }).then((response) => {
         console.log("Successfully set the auto state");
+        this.setState({ autoSwitchNotificationVisible: true });
       });
     }
 
     if (Number.isInteger(this.props.autoSensor)) {
-      autoToggleMarkup = <FormGroup>
-        <FormControlLabel
-          control={<Switch checked={this.state.autoEnabled} onChange={toggleAuto} />}
-          label="Auto"
-          labelPlacement="bottom"
-        />
-      </FormGroup> 
+      // autoToggleMarkup = <FormGroup>
+      //   <FormControlLabel
+      //     control={<Switch checked={this.state.autoEnabled} onChange={toggleAuto} />}
+      //     label="Auto"
+      //     labelPlacement="bottom"
+      //   />
+      // </FormGroup>
+        autoToggleMarkup = <Switch checked={this.state.autoEnabled} onChange={toggleAuto} />
     } else {
-      autoToggleMarkup = ' ';
+      autoToggleMarkup = '';
     }
 
     if (firstActiveBlindstate) {
@@ -187,7 +193,7 @@ class BlindHeightIndicator extends Component {
 
     return (
       <li className="blind-height-indicator">
-        <div className="actions">
+        <div className="sliders">
           <SetSlider onChange={this.setSliderChanged} value={this.state.setHeight} onChangeCommitted={this.handleSliderCommit} orientation="vertical" track="inverted" />
           <ThumblessSlider value={curHeight} orientation="vertical" track="inverted" />
         </div>
@@ -195,6 +201,13 @@ class BlindHeightIndicator extends Component {
           {this.props.blindsetName}
         </div>
         {autoToggleMarkup}
+        <Snackbar
+          message={`Auto mode on ${this.props.blindsetName} blinds has been ${this.state.autoEnabled ? 'enabled' : 'disabled'}`}
+          open={this.state.autoSwitchNotificationVisible}
+          autoHideDuration={4000}
+          onClose={() => {this.setState({autoSwitchNotificationVisible: false})}}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        />
       </li>
     );
   }
@@ -209,9 +222,9 @@ class App extends Component {
   };
 
   blindSets = {
-    "All"        : {
-      nums: ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15']
-    },
+    // "All"        : {
+    //   nums: ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15']
+    // },
     "East"       : {
       nums: ['2','1','3','4','5','6','7','8','9'],
       autoSensor: 0
@@ -220,13 +233,13 @@ class App extends Component {
       nums: ['11','10','12'],
       autoSensor: 1
     },
-    "North Door" : {
-      nums: ['10']
-    },
     "West"       : {
       nums: ['13','14','15'],
       auto: true,
       autoSensor: 2
+    },
+    "North Door" : {
+      nums: ['10']
     },
     "West Door"  : {
       nums: ['14']
