@@ -8,24 +8,19 @@ import time
 import datetime
 from blind_addresses import blind_address_mappings
 from auto_sensors import auto_sensors
-
+from auto_states import auto_states
 import RPi.GPIO as GPIO
 
-AUTO_CMD_INTERVAL = 5
-AUTO_STATES_FILE = os.path.join(sys.path[0], '.auto-states')
+AUTO_CMD_INTERVAL = 60 * 5
 BLIND_COMMAND_FILE = os.path.join(sys.path[0], 'send_blind_command.py')
-
+auto_states = {int(k):v for k,v in auto_states.items()}
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(21, GPIO.IN)
-
 
 def light_sensor_low(sensor):
-    print "Sensor {} value: {}".format(sensor, GPIO.input(auto_sensors[sensor]['GPIO']))
-    return GPIO.input(auto_sensors[sensor]['GPIO'])
-
-with open(AUTO_STATES_FILE) as f:
-  auto_states = json.load(f)
-  auto_states = {int(k):v for k,v in auto_states.items()}
+    pin = auto_sensors[sensor]['GPIO']
+    GPIO.setup(pin, GPIO.IN)
+    print "Sensor {} value: {}".format(sensor, GPIO.input(pin))
+    return GPIO.input(pin)
 
 # For the log
 print "\n-----  " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "  ----"
@@ -42,9 +37,9 @@ for sensor in auto_sensors:
         current_time = int(time.time())
         last_command_at = int(auto_states[sensor]["lastCommandAt"])
         if current_time - last_command_at > AUTO_CMD_INTERVAL:
-            cmd = 0
+            cmd = 100
             if light_sensor_low(sensor):
-                cmd = 100
+                cmd = 0
             blindNums = ','.join(map(str, auto_sensors[sensor]['blindNums']))
             cmd = '{} {} {} {}'.format(BLIND_COMMAND_FILE, blindNums, cmd, sensor)
             print "Enough time has passed. Sending auto command: " + cmd

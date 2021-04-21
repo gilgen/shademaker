@@ -3,19 +3,15 @@
 from smbus2 import SMBus
 import sys
 import time
-import os
 import json
 from blind_addresses import blind_address_mappings
+from auto_states import auto_states
+from auto_states import AUTO_STATES_FILE
 
 # This command is intended to be executed as:
 # /usr/bin/python send_cmd.py <blind number list> <command>
 # Example: Move the blinds 1,4,6, and 7 to 50% down
 # /usr/bin/python send_cmd.py 1,4,6,7 50
-
-AUTO_STATES_FILE = os.path.join(sys.path[0], '.auto-states')
-
-with open(AUTO_STATES_FILE) as f:
-  auto_states = json.load(f)
 
 command = int(sys.argv[2])
 blinds = list(map(int, sys.argv[1].split(',')))
