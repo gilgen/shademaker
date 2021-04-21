@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { Slider, Button } from '@material-ui/core';
+import { Slider } from '@material-ui/core';
 import { withStyles, MuiThemeProvider, createMuiTheme } from "@material-ui/core/styles";
 import CssBaseline from "@material-ui/core/CssBaseline";
 import './App.css';
@@ -8,7 +8,6 @@ import './App.css';
 import Switch from '@material-ui/core/Switch';
 import FormGroup from '@material-ui/core/FormGroup';
 import FormControlLabel from '@material-ui/core/FormControlLabel';
-import FormControl from '@material-ui/core/FormControl';
 
 
 const darkTheme = createMuiTheme({
@@ -63,11 +62,14 @@ class BlindHeightIndicator extends Component {
     blindsetName: '',
     blindNums: [],
     blindStates: {},
+    autoStates: {},
     setHeight: 100,
-    isMovingSetSlider: false
+    isMovingSetSlider: false,
+    autoEnabled: false
   }
 
   componentDidMount() {
+    this.tick();
     this.interval = setInterval(this.tick, 1000);
     let firstActiveBlindState = this.getFirstActiveBlindState();
     if (firstActiveBlindState) {
@@ -76,9 +78,17 @@ class BlindHeightIndicator extends Component {
   }
 
   tick = () => {
+    // Update the blind heights with data from the server
     let firstActiveBlindState = this.getFirstActiveBlindState();
     if (firstActiveBlindState && !this.state.isMovingSetSlider) {
       this.setState({ setHeight: 100-firstActiveBlindState.set });
+    }
+
+    // Update the auto states with data from the server
+    if (Number.isInteger(this.props.autoSensor)) {
+      this.setState({
+        autoEnabled: this.props.autoStates[this.props.autoSensor]['isEnabled']
+      });
     }
   }
 
@@ -144,13 +154,22 @@ class BlindHeightIndicator extends Component {
 
     let toggleAuto = () => {
       console.log("Toggle auto for: ", this.props.blindsetName);
-      // this.setState({  'autoEnabled' : !this.state.autoEnabled });
+      let newAutoState = !this.state.autoEnabled;
+      this.setState({  autoEnabled: newAutoState });
+      console.log(`Updating auto state for ${this.props.autoSensor} to ${newAutoState}`);
+      fetch(`/api/auto_sensors/${this.props.autoSensor}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', },
+        body: JSON.stringify({ is_enabled: newAutoState }),
+      }).then((response) => {
+        console.log("Successfully set the auto state");
+      });
     }
 
-    if (this.props.autoSensor) {
+    if (Number.isInteger(this.props.autoSensor)) {
       autoToggleMarkup = <FormGroup>
         <FormControlLabel
-          control={<Switch size="small" checked={this.state.autoEnabled} onChange={toggleAuto} />}
+          control={<Switch checked={this.state.autoEnabled} onChange={toggleAuto} />}
           label="Auto"
           labelPlacement="bottom"
         />
@@ -195,11 +214,11 @@ class App extends Component {
     },
     "East"       : {
       nums: ['2','1','3','4','5','6','7','8','9'],
-      autoSensor: 1
+      autoSensor: 0
     },
     "North"      : {
       nums: ['11','10','12'],
-      autoSensor: 2
+      autoSensor: 1
     },
     "North Door" : {
       nums: ['10']
@@ -207,7 +226,7 @@ class App extends Component {
     "West"       : {
       nums: ['13','14','15'],
       auto: true,
-      autoSensor: 3
+      autoSensor: 2
     },
     "West Door"  : {
       nums: ['14']
@@ -217,6 +236,7 @@ class App extends Component {
   // Poll the arduinos for their state
   componentDidMount() {
     this.interval = setInterval(this.tick, 1000);
+    this.tick();
   }
 
   tick = () => {
@@ -267,6 +287,7 @@ class App extends Component {
           return <BlindHeightIndicator
               key={blindSetName}
               blindStates={this.state.blindStates}
+              autoStates={this.state.autoStates}
               blindsetName={blindSetName}
               blindNums={this.blindSets[blindSetName].nums}
               autoSensor={this.blindSets[blindSetName].autoSensor}
