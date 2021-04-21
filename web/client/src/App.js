@@ -1,8 +1,15 @@
 import React, { Component } from 'react';
-import { Slider } from '@material-ui/core';
+import { Slider, Button } from '@material-ui/core';
 import { withStyles, MuiThemeProvider, createMuiTheme } from "@material-ui/core/styles";
 import CssBaseline from "@material-ui/core/CssBaseline";
 import './App.css';
+
+
+import Switch from '@material-ui/core/Switch';
+import FormGroup from '@material-ui/core/FormGroup';
+import FormControlLabel from '@material-ui/core/FormControlLabel';
+import FormControl from '@material-ui/core/FormControl';
+
 
 const darkTheme = createMuiTheme({
   palette: {
@@ -133,11 +140,29 @@ class BlindHeightIndicator extends Component {
   render() {
     let firstActiveBlindstate = this.getFirstActiveBlindState();
     let curHeight=100;
+    let autoToggleMarkup;
+
+    let toggleAuto = () => {
+      console.log("Toggle auto for: ", this.props.blindsetName);
+      // this.setState({  'autoEnabled' : !this.state.autoEnabled });
+    }
+
+    if (this.props.autoSensor) {
+      autoToggleMarkup = <FormGroup>
+        <FormControlLabel
+          control={<Switch size="small" checked={this.state.autoEnabled} onChange={toggleAuto} />}
+          label="Auto"
+          labelPlacement="bottom"
+        />
+      </FormGroup> 
+    } else {
+      autoToggleMarkup = ' ';
+    }
 
     if (firstActiveBlindstate) {
       curHeight = 100-firstActiveBlindstate.cur;
       if (!this.isMoving) {
-        this.state.setHeight = 100-firstActiveBlindstate.set;
+        this.setState("setHeight", 100-firstActiveBlindstate.set);
       }
     }
 
@@ -150,6 +175,7 @@ class BlindHeightIndicator extends Component {
         <div className="blindset-name">
           {this.props.blindsetName}
         </div>
+        {autoToggleMarkup}
       </li>
     );
   }
@@ -164,12 +190,28 @@ class App extends Component {
   };
 
   blindSets = {
-    "All"        : ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15'],
-    "East"       : ['1','2','3','4','5','6','7','8','9'],
-    "North"      : ['11','10','12'], // This is purposely out of order to prevent slider-child-changing-parent
-    "West"       : ['13','14','15'],
-    "North Door" : ['10'],
-    "West Door"  : ['14']
+    "All"        : {
+      nums: ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15']
+    },
+    "East"       : {
+      nums: ['2','1','3','4','5','6','7','8','9'],
+      autoSensor: 1
+    },
+    "North"      : {
+      nums: ['11','10','12'],
+      autoSensor: 2
+    },
+    "North Door" : {
+      nums: ['10']
+    },
+    "West"       : {
+      nums: ['13','14','15'],
+      auto: true,
+      autoSensor: 3
+    },
+    "West Door"  : {
+      nums: ['14']
+    }
   }
 
   // Poll the arduinos for their state
@@ -178,14 +220,17 @@ class App extends Component {
   }
 
   tick = () => {
-    this.refreshBlindStates().then((data) => {
-      this.setState({ blindStates: data })
+    this.getBlindStates().then((data) => {
+      this.setState({
+        blindStates: data.blindStates,
+        autoStates: data.autoStates
+      });
     }).catch((err) => {
       console.log(err)
     });
   }
 
-  refreshBlindStates = async () => {
+  getBlindStates = async () => {
     const resp = await fetch('/api/blinds');
     const body = await resp.json();
     if (resp.status !== 200) throw Error(body.message);
@@ -195,7 +240,7 @@ class App extends Component {
   handleSubmit = async e => {
     e.preventDefault();
     let [blindSetName, command] = this.state.post.split(' ');
-    let blinds = this.blindSets[blindSetName];
+    let blinds = this.blindSets.nums[blindSetName];
     console.log("blind set name: ", blindSetName);
     console.log("command: ", command);
     console.log("blinds: ", blinds);
@@ -223,7 +268,8 @@ class App extends Component {
               key={blindSetName}
               blindStates={this.state.blindStates}
               blindsetName={blindSetName}
-              blindNums={this.blindSets[blindSetName]}
+              blindNums={this.blindSets[blindSetName].nums}
+              autoSensor={this.blindSets[blindSetName].autoSensor}
             />
         })}
       </ul>
