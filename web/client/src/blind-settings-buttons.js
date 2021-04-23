@@ -10,6 +10,10 @@ import UpIcon from '@material-ui/icons/ArrowUpward';
 import DownIcon from '@material-ui/icons/ArrowDownward';
 import SaveIcon from '@material-ui/icons/Save';
 
+const UP_FOREVER_COMMAND = 104;
+const DOWN_FOREVER_COMMAND = 102;
+const STORE_COMMAND = 103;
+
 class BlindsetSlider extends Component {
 
   constructor(props) {
@@ -21,18 +25,18 @@ class BlindsetSlider extends Component {
 
   up() {
     console.log("Up: ", this.props.blindNumber);
-    sendCommand(this.props.blindNumber, 0);
+    sendCommand(this.props.blindNumber, UP_FOREVER_COMMAND);
   }
 
   down() {
     console.log("Down: ", this.props.blindNumber);
-    sendCommand(this.props.blindNumber, 102);
+    sendCommand(this.props.blindNumber, DOWN_FOREVER_COMMAND);
   }
 
   store() {
     console.log("Store: ", this.props.blindNumber);
     if(confirm("Store the current position as the bottom position?")) {
-      sendCommand(this.props.blindNumber, 103);
+      sendCommand(this.props.blindNumber, STORE_COMMAND);
     }
   }
 
