@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+# This command runs via cron every minute
+# * * * * * /home/pi/shademaker/bin/auto_heartbeat.py >> /home/pi/shademaker/log/auto_heartbeat.log 2>&1
+
 from smbus2 import SMBus
 import sys
 import os
@@ -11,7 +14,7 @@ from auto_sensors import auto_sensors
 from auto_states import auto_states
 import RPi.GPIO as GPIO
 
-AUTO_CMD_INTERVAL = 60 * 5
+AUTO_CMD_INTERVAL = 3600 * 5 # 5 hour no activity gap required for auto cmd
 BLIND_COMMAND_FILE = os.path.join(sys.path[0], 'send_blind_command.py')
 auto_states = {int(k):v for k,v in auto_states.items()}
 GPIO.setmode(GPIO.BCM)
