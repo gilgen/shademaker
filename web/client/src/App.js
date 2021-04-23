@@ -31,7 +31,7 @@ class App extends Component {
     blindStates: null,
     post: '',
     responseToPost: '',
-    settingsMode: true
+    settingsMode: false
   };
 
   // Poll the arduinos for their state
