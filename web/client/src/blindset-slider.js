@@ -77,6 +77,12 @@ class BlindsetSlider extends Component {
     }
   }
 
+  componentWillUnmount() {
+    if(this.interval) {
+      clearInterval(this.interval);
+    }
+  }
+
   tick = () => {
     // Update the blind heights with data from the server
     let firstActiveBlindState = this.getFirstActiveBlindState();

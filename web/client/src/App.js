@@ -40,6 +40,13 @@ class App extends Component {
     this.tick();
   }
 
+  componentWillUnmount() {
+    if(this.interval) {
+      console.log("Clearing tick interval in app");
+      clearInterval(this.interval);
+    }
+  }
+
   tick = () => {
     this.getBlindStates().then((data) => {
       this.setState({
@@ -50,7 +57,6 @@ class App extends Component {
       console.log(err)
     });
   }
-
 
   settingsClicked() {
     this.setState({ settingsMode: !this.state.settingsMode });
