@@ -91,7 +91,7 @@ class BlindsetSlider extends Component {
     }
 
     // Update the auto states with data from the server
-    if (Number.isInteger(this.props.autoSensor)) {
+    if (Number.isInteger(this.props.autoSensor) && !this.state.skipAutoUpdateViaTick) {
       this.setState({
         autoEnabled: this.props.autoStates[this.props.autoSensor]['isEnabled']
       });
@@ -125,6 +125,10 @@ class BlindsetSlider extends Component {
   toggleAuto() {
     let newAutoState = !this.state.autoEnabled;
     this.setState({  autoEnabled: newAutoState });
+    this.setState({ skipAutoUpdateViaTick: true });
+    setTimeout(() => {
+      this.setState({ skipAutoUpdateViaTick: false });
+    }, 5000);
     console.log(`Updating auto state for ${this.props.autoSensor} to ${newAutoState}`);
     fetch(`/api/auto_sensors/${this.props.autoSensor}`, {
       method: 'PUT',
