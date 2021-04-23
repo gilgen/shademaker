@@ -22,6 +22,7 @@ void receiveI2CCommand(int numByets);
 void i2cStateRequestHandler();
 void setReceivedCommand(int command);
 int getReceivedCommand();
+void storeCurrentPositionAsBottom();
 void setDesiredBlindPosition(long newPosition);
 void homeStepper();
 void moveBlinds(long longPosition);
@@ -104,7 +105,11 @@ void onTransMovingToMovingByMoveCommand();
 #define HOMING_STATE_RETURN_VALUE 200
 
 // I2C commands
-#define STOP_COMMAND 101 
+#define STOP_COMMAND 101
+#define DOWN_FOREVER_COMMAND 102
+#define STORE_COMMAND 103
+#define UP_FOREVER_COMMAND 104
+#define FOREVER_POSITION 100*REVOLUTION
 #define NOOP 200
 
 // FSM events
@@ -166,9 +171,10 @@ void loop() {
 
   // Only tick periodically to speed up the run loop. This
   // allows the motors to run a bit smoother
-  if (loopCnt % 5000 == 0) {
-    runAutoModeRoutines();
-  }
+  // Uncomment if you're using a hardwired auto switch
+  // if (loopCnt % 5000 == 0) {
+  //   runAutoModeRoutines();
+  // }
 
   if (loopCnt % 50 == 0) {
     // Tick the switches
@@ -288,7 +294,7 @@ void runAutoModeRoutines() {
 }
 
 boolean isValidCommand(int command) {
-  return (command >= 0 && command <= 101) || command == NOOP;
+  return (command >= 0 && command <= 103) || command == NOOP;
 }
 
 void setReceivedCommand(int command) {
@@ -304,12 +310,30 @@ void handleReceivedCommand() {
   if (command != NOOP) {
     if (command == STOP_COMMAND) {
       fsm.trigger(STOP);
+    } else if (command == STORE_COMMAND) {
+      storeCurrentPositionAsBottom();
+    } else if (command == DOWN_FOREVER_COMMAND) {
+      if (getDesiredBlindPosition() == FOREVER_POSITION) {
+        fsm.trigger(STOP);
+      } else {
+        setDesiredBlindPosition(FOREVER_POSITION);
+        fsm.trigger(MOVE_COMMAND);
+      }
+    } else if (command == UP_FOREVER_COMMAND) {
+      if (getDesiredBlindPosition() == -1*FOREVER_POSITION) {
+        fsm.trigger(STOP);
+      } else {
+        setDesiredBlindPosition(-1*FOREVER_POSITION);
+        fsm.trigger(MOVE_COMMAND);
+      }
     } else {
       long newPosition = bottomPosition * command / 100;
       if (newPosition == 0) {
         newPosition = (0 - SLIP_CORRECTION);
       }
-      if (newPosition != getDesiredBlindPosition()) {
+      if (newPosition <= 0 && getDesiredBlindPosition() == 0) {
+        // Don't action this command.
+      } else if (newPosition != getDesiredBlindPosition()) {
         setDesiredBlindPosition(newPosition);
         fsm.trigger(MOVE_COMMAND);
       } else {
@@ -323,32 +347,44 @@ void handleReceivedCommand() {
 void i2cStateRequestHandler() {
   // Serial.println("Received request for state");
   byte buffer[2];
-  long massagedDesiredPosition, setPosition;
+  long massagedDesiredPosition, massagedSetPosition;
 
   if (isHoming) {
-    massagedDesiredPosition = setPosition = HOMING_STATE_RETURN_VALUE;
+    massagedDesiredPosition = massagedSetPosition = HOMING_STATE_RETURN_VALUE;
   } else {
     massagedDesiredPosition = getDesiredBlindPosition();
+    massagedSetPosition = stepper.currentPosition();
     if (massagedDesiredPosition < 0) {
       massagedDesiredPosition = 0;
     }
+    if (massagedSetPosition < 0) {
+      massagedSetPosition = 0;
+    }
     massagedDesiredPosition = roundf(massagedDesiredPosition * 100.0 / bottomPosition);
-    setPosition = roundf(stepper.currentPosition() * 100.0 / bottomPosition);
+    massagedSetPosition = roundf(massagedSetPosition * 100.0 / bottomPosition);
   }
 
-  buffer[0] = setPosition;
+  buffer[0] = massagedSetPosition;
   buffer[1] = massagedDesiredPosition;
   // Serial.println((String)"Sending: " + buffer[0] + " and " + buffer[1]);
   Wire.write(buffer, 2);
 }
 
 void receiveI2CCommand(int bytes) {
-  int cmd = Wire.read();
-  // Serial.print("Received I2C command: ");
-  // Serial.println(cmd);
-  // Serial.print("Bytes argument: ");
-  // Serial.println(bytes);
+  int cmd;
+  if (bytes != 1) {
+    Serial.println((String)"Weird number of bytes!: " + bytes);
+  }
+  for (int i = 0; i < bytes; i++) {
+    cmd = Wire.read(); // receive byte as a character
+  }
+
+  // int cmd = Wire.read();
+  // Serial.print((String)"Bytes argument: " + bytes);
   if(isValidCommand(cmd)) {
+    if (cmd != NOOP) {
+      Serial.println((String)"Received I2C command: " + cmd);
+    }
     setReceivedCommand(cmd);
   } else {
     Serial.print("Invalid command: ");
@@ -406,7 +442,7 @@ void initializeSwitchHandlers() {
         bottomPosition = stepper.currentPosition();
         Serial.println("Found up and down buttons pressed. Storing stepper's current position as the bottom position: ");
         Serial.println(bottomPosition);
-        EEPROM.put(BOTTOM_POSITION_ADDRESS, bottomPosition);
+        storeCurrentPositionAsBottom();
       } else {
         bottomPosition = eepromBottomPosition;
         Serial.println("Didn't see up and down pressed so just resetting the bottom position to what is stored in EEPROM: ");
@@ -467,6 +503,11 @@ void initializeBottomPosition() {
     Serial.print("Pulled bottom position from EEPROM: ");
     Serial.println(bottomPosition);
   }
+}
+
+void storeCurrentPositionAsBottom() {
+  EEPROM.put(BOTTOM_POSITION_ADDRESS, stepper.currentPosition());
+  bottomPosition = stepper.currentPosition();
 }
 
 void disableSolenoid() {
