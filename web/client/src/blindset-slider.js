@@ -81,6 +81,9 @@ class BlindsetSlider extends Component {
     if(this.interval) {
       clearInterval(this.interval);
     }
+    if (this.autoTimeout) {
+      clearTimeout(this.autoTimeout);
+    }
   }
 
   tick = () => {
@@ -126,7 +129,7 @@ class BlindsetSlider extends Component {
     let newAutoState = !this.state.autoEnabled;
     this.setState({  autoEnabled: newAutoState });
     this.setState({ skipAutoUpdateViaTick: true });
-    setTimeout(() => {
+    this.autoTimeout = setTimeout(() => {
       this.setState({ skipAutoUpdateViaTick: false });
     }, 5000);
     console.log(`Updating auto state for ${this.props.autoSensor} to ${newAutoState}`);
