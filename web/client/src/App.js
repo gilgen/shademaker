@@ -1,250 +1,38 @@
 import React, { Component } from 'react';
-import { Slider } from '@material-ui/core';
-import { withStyles, MuiThemeProvider, createMuiTheme } from "@material-ui/core/styles";
+import { MuiThemeProvider, createMuiTheme } from "@material-ui/core/styles";
 import CssBaseline from "@material-ui/core/CssBaseline";
-import Snackbar from '@material-ui/core/Snackbar';
-// import Alert from '@material-ui/lab/Alert';
-import Switch from '@material-ui/core/Switch';
-import { Alert } from '@material-ui/core';
-
-// If you want the auto labelling, uncomment these
-// import FormGroup from '@material-ui/core/FormGroup';
-// import FormControlLabel from '@material-ui/core/FormControlLabel';
-
+import BlindsetSlider from "./blindset-slider";
+import BlindSettingsButtons from "./blind-settings-buttons";
+import blindSets from "./config/blindsets";
+import { getBlindStates } from './blind-functions';
+import IconButton from '@material-ui/core/IconButton';
+import SettingsIcon from '@material-ui/icons/Settings';
 import './App.css';
 
-const darkTheme = createMuiTheme({
+
+const theme = createMuiTheme({
   palette: {
     type: 'dark',
   },
 });
 
-const ThumblessSlider = withStyles({
-  thumb: {
-    height: 0,
-    width: 0,
-    display: 'none'
-  },
-  track: {
-    width: "8px !important",
-  },
-  rail: {
-    width: "8px !important"
-  }
-})(Slider);
-
-const SetSlider = withStyles({
-  root: {
-    color: '#52af77',
-  },
-  thumb: {
-    height: 25,
-    width: 25,
-    backgroundColor: '#fff',
-    border: '2px solid currentColor',
-    marginTop: -8,
-    marginLeft: "-9px !important",
-    '&:focus, &:hover, &$active': {
-      boxShadow: 'inherit',
-    },
-  },
-  active: {},
-  track: {
-    width: "5px !important",
-    borderRadius: "4px",
-  },
-  rail: {
-    width: "5px !important",
-    borderRadius: "4px",
-  },
-})(Slider);
-
-class BlindHeightIndicator extends Component {
-
-  state = {
-    blindsetName: '',
-    blindNums: [],
-    blindStates: {},
-    autoStates: {},
-    setHeight: 100,
-    isMovingSetSlider: false,
-    autoEnabled: false,
-    autoSwitchNotificationVisible: false
-  }
-
-  componentDidMount() {
-    this.tick();
-    this.interval = setInterval(this.tick, 1000);
-    let firstActiveBlindState = this.getFirstActiveBlindState();
-    if (firstActiveBlindState) {
-      this.setState({ setHeight: 100-firstActiveBlindState.set });
-    }
-  }
-
-  tick = () => {
-    // Update the blind heights with data from the server
-    let firstActiveBlindState = this.getFirstActiveBlindState();
-    if (firstActiveBlindState && !this.state.isMovingSetSlider) {
-      this.setState({ setHeight: 100-firstActiveBlindState.set });
-    }
-
-    // Update the auto states with data from the server
-    if (Number.isInteger(this.props.autoSensor)) {
-      this.setState({
-        autoEnabled: this.props.autoStates[this.props.autoSensor]['isEnabled']
-      });
-    }
-  }
-
-  getFirstActiveBlindState() {
-    let firstActiveBlindState;
-    this.props.blindNums.find((n) => {
-      if (this.props.blindStates[n].cur !== "unreachable") {
-        firstActiveBlindState = this.props.blindStates[n];
-        return true;
-      }
-      return false;
-    });
-    return firstActiveBlindState;
-  }
-
-  sendCommand(command) {
-    let blinds = this.props.blindNums;
-    console.log("Received command: ", command);
-    console.log(" -> Sending to:", blinds);
-    fetch('/api/blinds', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ blinds: blinds, command: command }),
-    }).then((response) => {
-      const body = response.text();
-      this.setState({ responseToCommand: body });
-    });
-  }
-
-  isMoving() {
-    if(!this.props.blindStates) {
-      return false;
-    }
-    let isMoving = false;
-    this.props.blindNums.forEach((num) => {
-      let state = this.props.blindStates[num];
-      if (state.cur !== state.set) {
-        isMoving = true;
-        return;
-      }
-    });
-    return isMoving;
-  }
-
-  setSliderChanged = (e, newVal) => {
-    e.preventDefault();
-    this.setState({ setHeight: newVal, isMovingSetSlider: true });
-  }
-
-  handleSliderCommit = (event, newValue) => {
-    this.sendCommand(100-newValue);
-    setTimeout(() => {
-      this.setState({ isMovingSetSlider: false });
-    }, 1500);
-  }
-
-  render() {
-    let firstActiveBlindstate = this.getFirstActiveBlindState();
-    let curHeight=100;
-    let autoToggleMarkup;
-
-    let toggleAuto = () => {
-      console.log("Toggle auto for: ", this.props.blindsetName);
-      let newAutoState = !this.state.autoEnabled;
-      this.setState({  autoEnabled: newAutoState });
-      console.log(`Updating auto state for ${this.props.autoSensor} to ${newAutoState}`);
-      fetch(`/api/auto_sensors/${this.props.autoSensor}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', },
-        body: JSON.stringify({ is_enabled: newAutoState }),
-      }).then((response) => {
-        console.log("Successfully set the auto state");
-        this.setState({ autoSwitchNotificationVisible: true });
-      });
-    }
-
-    if (Number.isInteger(this.props.autoSensor)) {
-      // autoToggleMarkup = <FormGroup>
-      //   <FormControlLabel
-      //     control={<Switch checked={this.state.autoEnabled} onChange={toggleAuto} />}
-      //     label="Auto"
-      //     labelPlacement="bottom"
-      //   />
-      // </FormGroup>
-      autoToggleMarkup = <Switch checked={this.state.autoEnabled} onChange={toggleAuto} />
-    } else {
-      autoToggleMarkup = '';
-    }
-
-    if (firstActiveBlindstate) {
-      curHeight = 100-firstActiveBlindstate.cur;
-      if (!this.isMoving) {
-        this.setState("setHeight", 100-firstActiveBlindstate.set);
-      }
-    }
-
-    return (
-      <li className="blind-height-indicator">
-        <div className="sliders">
-          <SetSlider onChange={this.setSliderChanged} value={this.state.setHeight} onChangeCommitted={this.handleSliderCommit} orientation="vertical" track="inverted" />
-          <ThumblessSlider value={curHeight} orientation="vertical" track="inverted" />
-        </div>
-        <div className="blindset-name">
-          {this.props.blindsetName}
-        </div>
-        {autoToggleMarkup}
-        <Snackbar
-          message={`Auto mode on ${this.props.blindsetName} blinds has been ${this.state.autoEnabled ? 'enabled' : 'disabled'}`}
-          open={this.state.autoSwitchNotificationVisible}
-          autoHideDuration={4000}
-          onClose={() => {this.setState({autoSwitchNotificationVisible: false})}}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        />
-      </li>
-    );
-  }
-}
-
 class App extends Component {
+
+  constructor(props) {
+    super(props);
+    this.blindSliders = this.blindSliders.bind(this);
+    this.getBlindStates = getBlindStates.bind(this);
+    this.settingsClicked = this.settingsClicked.bind(this);
+    this.settings = this.settings.bind(this);
+    this.mainContent = this.mainContent.bind(this);
+  }
 
   state = {
     blindStates: null,
     post: '',
     responseToPost: '',
+    settingsMode: true
   };
-
-  blindSets = {
-    "All"        : {
-      nums: ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15']
-    },
-    "East"       : {
-      nums: ['2','1','3','4','5','6','7','8','9'],
-      autoSensor: 0
-    },
-    "North"      : {
-      nums: ['11','10','12'],
-      autoSensor: 1
-    },
-    "West"       : {
-      nums: ['13','14','15'],
-      auto: true,
-      autoSensor: 2
-    },
-    "North Door" : {
-      nums: ['10']
-    },
-    "West Door"  : {
-      nums: ['14']
-    }
-  }
 
   // Poll the arduinos for their state
   componentDidMount() {
@@ -263,64 +51,67 @@ class App extends Component {
     });
   }
 
-  getBlindStates = async () => {
-    const resp = await fetch('/api/blinds');
-    const body = await resp.json();
-    if (resp.status !== 200) throw Error(body.message);
-    return body;
+
+  settingsClicked() {
+    this.setState({ settingsMode: !this.state.settingsMode });
   }
 
-  handleSubmit = async e => {
-    e.preventDefault();
-    let [blindSetName, command] = this.state.post.split(' ');
-    let blinds = this.blindSets.nums[blindSetName];
-    console.log("blind set name: ", blindSetName);
-    console.log("command: ", command);
-    console.log("blinds: ", blinds);
-    const response = await fetch('/api/blinds', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ blinds: blinds, command: command }),
-    });
+  BlindSettingsButtons
 
-    const body = await response.text();
-
-    this.setState({ responseToPost: body });
+  settings() {
+    return <ul className="blind-heights-container">
+      {blindSets['All'].nums.map((blindNumber) => {
+        return <BlindSettingsButtons
+          key={"blind-number-" + blindNumber}
+          blindStates={this.state.blindStates}
+          autoStates={this.state.autoStates}
+          blindNumber={blindNumber}
+        />
+      })}
+    </ul>
   }
 
-  render() {
-    let blindStates = this.state.blindStates;
-    let blindHeightsContainer;
-    if (blindStates) {
-      blindStates = "Loading blind states...";
-      blindHeightsContainer = <ul className="blind-heights-container">
-        {Object.keys(this.blindSets).map((blindSetName, i) => {
-          return <BlindHeightIndicator
-              key={blindSetName}
-              blindStates={this.state.blindStates}
-              autoStates={this.state.autoStates}
-              blindsetName={blindSetName}
-              blindNums={this.blindSets[blindSetName].nums}
-              autoSensor={this.blindSets[blindSetName].autoSensor}
-            />
+  mainContent() {
+    if (this.state.settingsMode) {
+      return this.settings();
+    } else {
+      return this.blindSliders();
+    }
+  }
+
+  blindSliders() {
+    if (this.state.blindStates) {
+      return <ul className="blind-heights-container">
+        {Object.keys(blindSets).map((blindSetName) => {
+          return <BlindsetSlider
+            key={blindSetName}
+            blindStates={this.state.blindStates}
+            autoStates={this.state.autoStates}
+            blindsetName={blindSetName}
+            blindNums={blindSets[blindSetName].nums}
+            autoSensor={blindSets[blindSetName].autoSensor}
+          />
         })}
       </ul>
     } else {
-      blindStates = JSON.stringify(blindStates, null, 2);
-      blindHeightsContainer = "Loading blind heights...";
+      return "Loading blind heights...";
     }
+  }
 
+  render() {
     return (
-      <MuiThemeProvider theme={darkTheme}>
+      <MuiThemeProvider theme={theme}>
         <CssBaseline />
         <div className="App" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', }}>
-          {blindHeightsContainer}
+          <IconButton fontSize="small" onClick={this.settingsClicked} className="settings-icon" aria-label="delete" size="small">
+            <SettingsIcon />
+          </IconButton>
+          {this.mainContent()}
         </div>
       </MuiThemeProvider>
     );
   }
+
 }
 
 export default App;

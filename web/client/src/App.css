@@ -37,6 +37,17 @@ ul.blind-heights-container {
   width: 120px;
 }
 
+.settings-icon {
+  position: absolute !important;
+  right: 0px !important;
+  top: 10px !important;
+}
+
+button.settings-button {
+
+  padding: 7px 3px;
+}
+
 /* .MuiSlider-track:not(.MuiSlider-active) { */
 /*   transition: height 1s ease-in; */
 /* } */
@@ -45,7 +56,15 @@ ul.blind-heights-container {
   transition: height 1s ease-in-out;
 }
 
-.blind-height-indicator {
+li.blind-settings-buttons-container {
+  padding-bottom: 15px;
+  display: inline-block;
+  padding: 15px 5px;
+  vertical-align: top;
+  width: 45px;
+}
+
+li.blind-height-indicator {
   padding-bottom: 15px;
   display: inline-block;
   padding: 15px 5px;
